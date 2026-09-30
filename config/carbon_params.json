@@ -1,0 +1,128 @@
+{
+  "version": "0.2.0-draft",
+  "status_note": "샘플 실행용 파라미터. status가 'to_verify' 또는 'assumption'인 항목은 tree-scientist 검증 전까지 서비스 화면에 확정값으로 쓰지 않는다.",
+  "n_draws": 2000,
+  "interval_percentiles": [10, 50, 90],
+  "seed": 20261001,
+  "co2_per_c": 3.666667,
+  "min_dbh_cm": 2.5,
+  "jenkins_groups": {
+    "_source": "Jenkins, Chojnacky, Heath & Birdsey (2003) Forest Science 49(1):12-35, 표 4. 지상부 건중량(kg) = exp(b0 + b1 ln DBH[cm])",
+    "_status": "to_verify",
+    "cedar_larch":      {"b0": -2.0336, "b1": 2.2592, "label": "삼나무·낙엽송군"},
+    "pine":             {"b0": -2.5356, "b1": 2.4349, "label": "소나무군"},
+    "spruce":           {"b0": -2.0773, "b1": 2.3323, "label": "가문비나무군"},
+    "aspen_alder_cottonwood_willow": {"b0": -2.2094, "b1": 2.3867, "label": "사시·오리·미루·버드나무군"},
+    "soft_maple_birch": {"b0": -1.9123, "b1": 2.3651, "label": "무른단풍·자작나무군"},
+    "mixed_hardwood":   {"b0": -2.4800, "b1": 2.4835, "label": "혼합활엽수군"},
+    "hard_maple_oak":   {"b0": -2.0127, "b1": 2.4342, "label": "단단한단풍·참나무군"}
+  },
+  "urban_factor": {
+    "low": 0.7, "high": 0.9, "center": 0.8,
+    "label": "도시 개방생육 보정계수",
+    "source": "i-Tree: 수관 광노출 4–5인 개방생육 나무의 바이오매스에 0.8을 곱함(Nowak 2021, GTR-NRS-200-2021, 24쪽). 0.7~0.9 범위는 가정",
+    "status": "assumption"
+  },
+  "root_shoot_ratio": {
+    "low": 0.20, "high": 0.32, "center": 0.26,
+    "label": "뿌리/지상부 비율",
+    "source": "i-Tree: 뿌리/지상부 0.26(Cairns 등 1997; Nowak 2021, 23쪽). 0.20~0.32 범위는 가정",
+    "status": "assumption"
+  },
+  "carbon_fraction": {
+    "low": 0.47, "high": 0.50, "center": 0.50,
+    "label": "건중량 중 탄소 비율",
+    "source": "IPCC 2006 기본값 0.47 ~ i-Tree 0.5",
+    "status": "to_verify"
+  },
+  "dbh_error_cv": {
+    "value": 0.03,
+    "label": "흉고직경 측정·기록 오차(변동계수)",
+    "source": "가정: 공공데이터 흉고값의 측정·기록 오차 3%",
+    "status": "assumption"
+  },
+  "dbh_error_cv_block": {
+    "value": 0.15,
+    "label": "일괄 입력 의심 흉고의 오차(변동계수)",
+    "source": "가정: 같은 도로구간·수종에서 같은 값이 10그루 이상 반복되면 개별 실측이 아닌 대표값으로 보고 오차를 크게 잡음",
+    "status": "assumption"
+  },
+  "allometry_residual_sd_log": {
+    "value": 0.20,
+    "label": "상대생장식 개체 잔차(로그 표준편차)",
+    "source": "가정: 산림 표본으로 만든 일반식을 도시 개체에 적용할 때의 잔차",
+    "status": "assumption"
+  },
+  "mapping_alt_prob": {
+    "value": 0.30,
+    "label": "대리 수종군이 부적합할 확률",
+    "source": "가정: 수종별 상대생장식이 없어 대리군을 쓰는 데 따른 불확실성",
+    "status": "assumption"
+  },
+  "growth": {
+    "label": "연간 흉고직경 생장량",
+    "method_source": "i-Tree 생장 규칙(Nowak 2021, GTR-NRS-200-2021, 43–44쪽): 생장 = 표준생장 × (서리 없는 기간/153) × 수관 광노출 계수 × (1 − 고사율) × 최대 흉고 대비 크기 계수",
+    "standard_cm_per_yr": {
+      "slow": 0.58, "moderate": 0.84, "fast": 1.09,
+      "label": "표준 직경생장(개방생육, 서리 없는 기간 153일 기준, cm/년)",
+      "source": "Nowak 2021, 43쪽",
+      "status": "verified"
+    },
+    "standard_frost_free_days": 153,
+    "frost_free_days": {
+      "low": 190, "high": 215, "center": 202,
+      "label": "전주 서리 없는 기간(일)",
+      "source": "가정: 전주의 대략적 무상기간. 기상청 전주 관측소(146) 서리 자료로 교체 필요",
+      "status": "assumption"
+    },
+    "crown_light_exposure": {
+      "open_factor": 1.0, "partial_factor": 0.56, "partial_prob": 0.2,
+      "label": "수관 광노출 계수(4–5: ×1, 2–3: ×0.56)",
+      "source": "계수는 Nowak 2021, 44쪽. 가로수 20%가 부분 차광(2–3)이라는 비율은 가정",
+      "status": "assumption"
+    },
+    "individual_rel_halfwidth": {
+      "value": 0.30,
+      "label": "개체별 생장 편차(±비율)",
+      "source": "가정: i-Tree 값은 수종군 평균이며 개체는 이보다 크거나 작을 수 있음(Nowak 2021, 45쪽)",
+      "status": "assumption"
+    },
+    "dieback": {
+      "value": 0.0,
+      "label": "수관 고사율",
+      "source": "원본에 없음. 건강한 나무로 가정(i-Tree는 생장 × (1 − 고사율))",
+      "status": "assumption"
+    },
+    "max_dbh_cm": {
+      "small": 38.1, "medium": 76.2, "large": 114.3,
+      "label": "성숙 수고 등급별 최대 흉고(cm): 12.2m 미만 / 12.2–18.3m / 18.3m 초과",
+      "source": "Nowak 2021, 44쪽. 수종별 성숙 수고 등급(config/species.csv)은 수목도감 기준 가정",
+      "status": "verified"
+    },
+    "size_decline": {
+      "start": 0.80, "end": 1.25, "floor": 0.0222,
+      "label": "큰 나무 생장 둔화(최대 흉고의 80%에서 시작, 125%에서 2.22%)",
+      "source": "Nowak 2021, 44쪽",
+      "status": "verified"
+    }
+  },
+  "scenarios": {
+    "citizen_measured": {
+      "label": "시민이 흉고둘레를 2년간 재서 실측 생장량을 확보한 경우",
+      "dbh_error_cv": 0.01,
+      "growth_measured_rel_halfwidth": 0.05
+    },
+    "local_allometry": {
+      "label": "국내 도시 가로수 수종별 상대생장식을 확보한 경우",
+      "allometry_residual_sd_log": 0.10,
+      "mapping_alt_prob": 0.0
+    },
+    "both": {
+      "label": "두 가지를 모두 갖춘 경우",
+      "dbh_error_cv": 0.01,
+      "growth_measured_rel_halfwidth": 0.05,
+      "allometry_residual_sd_log": 0.10,
+      "mapping_alt_prob": 0.0
+    }
+  }
+}

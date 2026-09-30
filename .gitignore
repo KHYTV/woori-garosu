@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.pytest_cache/
+# 산림청 전국 원본(143MB)은 공공데이터포털에서 받는다
+data/raw/forest_service_*.csv
+# 파이프라인 출력은 다시 만들 수 있다. 웹에 필요한 것은 export_web이 docs/로 옮긴다
+data/out/

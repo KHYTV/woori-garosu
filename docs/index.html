@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>우리동네가로수 · 전주 데모</title>
+<meta name="description" content="전주 가로수 3.8만 그루의 위치와 탄소 흡수 추정 범위를 보고, 보호자가 되어 관찰을 기록하는 시민참여형 도시숲 플랫폼 데모">
+<meta name="theme-color" content="#2b6d45">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='13' r='10' fill='%232b6d45'/%3E%3Crect x='14.5' y='20' width='3' height='9' rx='1' fill='%23185131'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;650&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="./" aria-label="우리동네가로수 처음으로">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="13" r="10"/><rect x="14.5" y="20" width="3" height="9" rx="1"/></svg>
+    <span>우리동네가로수</span><small>전주 데모</small>
+  </a>
+  <nav class="tabs" aria-label="화면">
+    <button type="button" data-view="map" aria-pressed="true">지도</button>
+    <button type="button" data-view="summary" aria-pressed="false">요약</button>
+    <button type="button" data-view="about" aria-pressed="false">소개</button>
+  </nav>
+</header>
+
+<main id="main">
+  <section id="view-map" class="view map-view" aria-label="지도">
+    <div id="map" role="region" aria-label="전주 가로수 지도"></div>
+    <div class="map-controls">
+      <label class="field" for="search"><span class="sr-only">도로 이름으로 찾기</span>
+        <input id="search" type="search" list="roadList" placeholder="도로 이름으로 찾기 (예: 백제대로)" autocomplete="off">
+      </label>
+      <datalist id="roadList"></datalist>
+      <label class="field" for="speciesFilter"><span class="sr-only">수종</span>
+        <select id="speciesFilter"><option value="">모든 수종</option></select>
+      </label>
+      <button type="button" id="locate" class="btn ghost">내 위치</button>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="status" id="status" role="status">지도를 불러오는 중입니다.</div>
+    <aside id="sheet" class="sheet" hidden aria-live="polite"></aside>
+  </section>
+
+  <section id="view-summary" class="view page" hidden aria-label="요약"></section>
+
+  <section id="view-about" class="view page" hidden aria-label="소개">
+    <div class="page-inner">
+      <h1>우리동네가로수</h1>
+      <p class="lede">시민이 동네 가로수를 공동보호자로 맡아 기록하는 시민참여형 도시숲 플랫폼의 첫 데모입니다. 전북대학교 데이터커뮤니케이션연구소가 연구용으로 만들고 있습니다.</p>
+      <h2>이 데모로 할 수 있는 것</h2>
+      <ul>
+        <li>전주 가로수 37,952그루의 위치·수종·흉고를 지도에서 봅니다.</li>
+        <li>나무마다 1년에 흡수하는 CO₂를 세 가지 방식(단일값, 범위, 범위와 한계)으로 봅니다. 연구에서 비교하는 표시 방식입니다.</li>
+        <li>보호자가 되어 관찰을 기록하고, 흉고둘레를 재서 넣으면 추정 범위가 얼마나 좁아지는지 바로 봅니다.</li>
+      </ul>
+      <h2>개인정보</h2>
+      <p>보호자 등록과 관찰 기록은 이 기기의 브라우저에만 저장되고 어디로도 전송되지 않습니다. '내 위치'는 지도를 옮길 때만 쓰고 저장하지 않습니다.</p>
+      <h2>데이터와 방법</h2>
+      <ul>
+        <li>가로수: 산림청 「도시숲가로수관리 가로수 현황」 2025-08-26판(공공데이터포털, 이용 제한 없음). 원본은 전북 지역 시군구명이 비어 있어 전주시 경계 안의 좌표로 전주 나무를 골랐습니다.</li>
+        <li>탄소: Jenkins 등(2003) 수종군 상대생장식, i-Tree 방식의 도시 보정과 생장 규칙(Nowak 2021)을 쓰고, 계수 불확실성을 2,000번 추출해 80% 범위를 냅니다. 일부 계수는 검증 전 가정값이라 수치는 방법 시연용입니다.</li>
+        <li>자세한 결과: <a href="report/jeonju.html">전주 분석 보고서</a> · <a href="report/sample.html">합성 샘플 보고서</a></li>
+      </ul>
+      <h2>출처 표시</h2>
+      <p class="small">배경지도 © <a href="https://openfreemap.org" rel="noopener">OpenFreeMap</a>, © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> contributors · 전주시 경계 © OpenStreetMap contributors (ODbL) · 지도 라이브러리 <a href="https://maplibre.org" rel="noopener">MapLibre</a> · 가로수 원자료 산림청</p>
+    </div>
+  </section>
+</main>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

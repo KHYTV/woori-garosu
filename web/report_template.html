@@ -1,0 +1,781 @@
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;650&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 현장 야장처럼 위에서 아래로 읽는 한 단 보고서. 지도와 나무 카드만 좌우 2단 */
+:root {
+  --bg: #f3f5f1;
+  --surface: #fbfcfa;
+  --ink: #15201a;
+  --ink-2: #4b574e;
+  --muted: #737d75;
+  --line: #dce2db;
+  --accent: #2b6d45;
+  --accent-soft: #e2ede5;
+  --seq-1: #8cbf9c; --seq-2: #63a47a; --seq-3: #448a5c; --seq-4: #2b6d45; --seq-5: #185131;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --ring: rgba(21, 32, 26, 0.10);
+  --font-display: "Hahmlet", "IBM Plex Sans KR", "Apple SD Gothic Neo", serif;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1310; --surface: #161b17; --ink: #e9eee8; --ink-2: #aeb8af; --muted: #858f87;
+    --line: #28312b; --accent: #74c68e; --accent-soft: #1c2a21;
+    --seq-1: #2f5c3e; --seq-2: #3b7d50; --seq-3: #4ea267; --seq-4: #74c68e; --seq-5: #aee6bd;
+    --ring: rgba(255, 255, 255, 0.10);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1310; --surface: #161b17; --ink: #e9eee8; --ink-2: #aeb8af; --muted: #858f87;
+  --line: #28312b; --accent: #74c68e; --accent-soft: #1c2a21;
+  --seq-1: #2f5c3e; --seq-2: #3b7d50; --seq-3: #4ea267; --seq-4: #74c68e; --seq-5: #aee6bd;
+  --ring: rgba(255, 255, 255, 0.10);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 36px 72px; display: grid; gap: 44px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 650; text-wrap: balance; margin: 0; line-height: 1.25; }
+h1 { font-size: clamp(28px, 4.4vw, 40px); letter-spacing: -0.01em; }
+h2 { font-size: 22px; }
+h3 { font-size: 16px; font-family: var(--font-body); font-weight: 600; }
+p { margin: 0; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.eyebrow { font-family: var(--font-num); font-size: 12px; letter-spacing: 0.06em; color: var(--muted); }
+.lede { max-width: 65ch; color: var(--ink-2); font-size: 16px; }
+.desc { max-width: 72ch; color: var(--ink-2); }
+section { display: grid; gap: 16px; min-width: 0; }
+.head { display: grid; gap: 14px; }
+.notice { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 12px 16px; max-width: 84ch; color: var(--ink-2); font-size: 14px; }
+.notice strong { color: var(--ink); }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 4px; align-content: start; }
+.kpi .label { font-size: 13px; color: var(--ink-2); }
+.kpi .value { font-size: 26px; font-weight: 600; line-height: 1.2; }
+.kpi .value small { font-size: 14px; font-weight: 400; color: var(--ink-2); margin-left: 2px; }
+.kpi .sub { font-size: 12.5px; color: var(--muted); }
+
+.findings { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.finding .fig { font-family: var(--font-num); font-size: 22px; font-weight: 500; line-height: 1.2; }
+.finding .what { font-weight: 600; font-size: 14.5px; }
+.finding p { font-size: 13.5px; color: var(--ink-2); }
+
+.split { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 880px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; display: grid; gap: 12px; align-content: start; }
+.mapbox { position: relative; touch-action: none; }
+.mapbox canvas { display: block; width: 100%; border-radius: 6px; cursor: crosshair; }
+.maptools { position: absolute; top: 8px; right: 8px; display: grid; gap: 4px; }
+.maptools button { font: inherit; font-size: 15px; line-height: 1; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.maptools button.wide { width: auto; padding: 0 8px; font-size: 12px; }
+.maptools button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink-2); align-items: center; }
+.legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
+.legend .ramp { display: inline-flex; gap: 2px; margin: 0 6px; vertical-align: -2px; }
+.legend .ramp i { width: 18px; height: 10px; border-radius: 2px; display: block; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 4px 16px var(--ring); border-radius: 6px; padding: 8px 10px; font-size: 12.5px; line-height: 1.45; max-width: 240px; }
+
+.tree-title { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.tree-title h3 { font-family: var(--font-display); font-size: 20px; font-weight: 650; }
+.meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; font-size: 14px; margin: 0; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; min-width: 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; color: var(--ink-2); background: var(--surface); white-space: nowrap; }
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 3px; background: var(--bg); flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--ink-2); padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+.seg button:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 10px; background: var(--bg); }
+.card .k { font-size: 13px; color: var(--ink-2); }
+.card .big { font-family: var(--font-display); font-size: 34px; font-weight: 650; line-height: 1.15; }
+.card .big small { font-family: var(--font-body); font-size: 15px; font-weight: 400; color: var(--ink-2); margin-left: 4px; }
+.card .limit { font-size: 13.5px; color: var(--ink-2); }
+.track { position: relative; height: 14px; }
+.track .rail { position: absolute; left: 0; right: 0; top: 6px; height: 2px; background: var(--line); border-radius: 2px; }
+.track .band { position: absolute; top: 3px; height: 8px; background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 4px; }
+.track .mid { position: absolute; top: 0; width: 2px; height: 14px; background: var(--accent); }
+.track-labels { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+details { font-size: 13.5px; color: var(--ink-2); }
+details summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+details ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+.empty { color: var(--ink-2); font-size: 14px; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+select { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; max-width: 100%; }
+label.inline { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; color: var(--ink-2); }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.callout { font-size: 14.5px; max-width: 75ch; }
+.callout b { font-weight: 600; }
+
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12.5px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.r, th.r { text-align: right; white-space: nowrap; }
+td .sci { font-style: italic; color: var(--muted); font-size: 12.5px; }
+td .sub { color: var(--muted); font-size: 12.5px; }
+.bar-inline { display: inline-block; height: 8px; border-radius: 0 4px 4px 0; background: var(--accent); vertical-align: 0; margin-right: 8px; }
+.grades { display: flex; height: 22px; gap: 2px; border-radius: 6px; overflow: hidden; }
+.grades div { min-width: 3px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; align-items: start; }
+@media (max-width: 820px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+ul.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 78ch; }
+footer { color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <div class="eyebrow" id="eyebrow"></div>
+    <h1 id="h1"></h1>
+    <p class="lede" id="lede"></p>
+    <div class="notice" id="notice"></div>
+  </header>
+
+  <section aria-label="요약">
+    <div class="kpis" id="kpis"></div>
+  </section>
+
+  <section id="findingsSec" hidden>
+    <h2>원본 데이터에서 확인한 것</h2>
+    <p class="desc">탄소 계산 전에 원본 자체를 감사한 결과입니다. 연구1(공공데이터 품질 감사)의 첫 결과물로 쓸 수 있습니다.</p>
+    <div class="findings" id="findings"></div>
+    <div class="panel chart" id="digitPanel"><h3>흉고직경 끝자리 분포 <span class="eyebrow">비율</span></h3><div id="digits"></div><p class="desc" id="digitNote"></p></div>
+  </section>
+
+  <section>
+    <h2>지도와 탄소 카드</h2>
+    <p class="desc" id="mapDesc"></p>
+    <div class="split">
+      <div class="panel">
+        <div class="mapbox" id="mapbox">
+          <canvas id="map" role="img" aria-label="가로수 위치 지도. 점 색은 연간 CO2 흡수량, 크기는 흉고직경"></canvas>
+          <div class="maptools"><button type="button" id="zin" aria-label="확대">+</button><button type="button" id="zout" aria-label="축소">−</button><button type="button" class="wide" id="zreset">전체</button></div>
+          <div class="tip" id="tip" hidden></div>
+        </div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="panel" id="treePanel" aria-live="polite"></div>
+    </div>
+    <div class="controls">
+      <label class="inline" for="pick">키보드로 고르기 <select id="pick"></select></label>
+    </div>
+  </section>
+
+  <section>
+    <h2>범위는 어디서 오나</h2>
+    <p class="desc">수종별 대표 나무(흉고 중앙값)로 불확실성 원천을 하나씩만 움직여 80% 구간 폭을 비교했습니다. 오른쪽은 조건이 갖춰질 때 범위가 얼마나 좁아지는지 보여 줍니다.</p>
+    <div class="controls"><label class="inline" for="spSel">수종 <select id="spSel"></select></label></div>
+    <div class="charts">
+      <div class="panel chart"><h3>원천별 80% 구간 폭 <span class="eyebrow">kg CO₂/년</span></h3><div id="contrib"></div></div>
+      <div class="panel chart"><h3>조건별 연간 흡수량 범위 <span class="eyebrow">kg CO₂/년</span></h3><div id="scen"></div></div>
+    </div>
+    <p class="callout" id="insight"></p>
+  </section>
+
+  <section>
+    <h2>수종별 결과</h2>
+    <div class="tablebox"><table id="spTable"></table></div>
+  </section>
+
+  <section>
+    <h2>도로구간 합계</h2>
+    <p class="desc" id="roadDesc"></p>
+    <div class="tablebox"><table id="roadTable"></table></div>
+  </section>
+
+  <section>
+    <h2>나무별 품질 등급</h2>
+    <p class="desc" id="qualityDesc"></p>
+    <div class="cols">
+      <div class="panel">
+        <h3>등급 분포</h3>
+        <div class="grades" id="gradeBar" role="img" aria-label="품질 등급 분포"></div>
+        <div class="legend" id="gradeLegend"></div>
+        <dl class="meta" id="completeness"></dl>
+      </div>
+      <div class="tablebox"><table id="issueTable"></table></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>서울 가로수 트리맵과 대조</h2>
+    <div class="panel chart"><div id="seoul"></div></div>
+    <p class="callout" id="seoulText"></p>
+  </section>
+
+  <section>
+    <h2>계수와 검증 상태</h2>
+    <p class="desc">'가정'과 '확인 필요' 항목은 문헌 대조와 i-Tree Eco 교차검증 전까지 서비스 화면에 확정값으로 쓰지 않습니다.</p>
+    <div class="tablebox"><table id="paramTable"></table></div>
+    <p class="callout" id="modelNote"></p>
+  </section>
+
+  <section>
+    <h2>다음 단계</h2>
+    <ul class="steps" id="steps"></ul>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+
+<script type="application/json" id="data">__DATA__</script>
+<script>
+(function () {
+  const D = JSON.parse(document.getElementById("data").textContent);
+  const R = D.result, M = D.map, P = R.params, X = R.extraction, REAL = R.meta.kind === "real";
+  const NS = "http://www.w3.org/2000/svg";
+  const nf = (v, d = 0) => Number(v).toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const kg = v => (Math.abs(v) < 10 ? nf(v, 1) : nf(v, 0));
+  const pctf = (v, d = 1) => nf(v * 100, d) + "%";
+  const STYLE_ATTRS = new Set(["fill", "stroke", "font-family"]);
+  const el = (tag, attrs = {}, text) => {
+    const isSvg = tag.startsWith("svg:");
+    const e = isSvg ? document.createElementNS(NS, tag.slice(4)) : document.createElement(tag);
+    let style = "";
+    for (const [k, v] of Object.entries(attrs)) {
+      // CSS 변수는 SVG 속성값에서 해석되지 않는 브라우저가 있어 style로 넘긴다
+      if (isSvg && STYLE_ATTRS.has(k) && String(v).includes("var(")) style += `${k}:${v};`;
+      else e.setAttribute(k, v);
+    }
+    if (style) e.setAttribute("style", style);
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  const token = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const issueLabel = Object.fromEntries(R.quality.issues.map(i => [i.code, i.label]));
+  const DATASET_WIDE = new Set(["crs_converted", "sgg_missing"]);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  const q = R.quality, t = R.totals;
+
+  // 머리말
+  document.getElementById("eyebrow").textContent = `D안 · ${R.meta.label} · 계수 ${R.meta.param_version}`;
+  document.getElementById("h1").textContent = REAL ? "전주 가로수 탄소 추정" : "우리동네가로수 탄소 추정 샘플";
+  document.getElementById("lede").textContent = REAL
+    ? "산림청 가로수 현황 원본에서 전주시 나무만 뽑아 정제·품질 감사·나무별 탄소 범위 계산·집계를 한 결과입니다. 나무를 누르면 연구2의 세 가지 표시 방식으로 탄소 카드를 볼 수 있습니다."
+    : "산림청 가로수 현황과 같은 형식의 데이터를 넣으면 정제·품질 감사·나무별 탄소 범위 계산·집계까지 한 번에 돌아갑니다. 나무를 누르면 연구2의 세 가지 표시 방식으로 탄소 카드를 볼 수 있습니다.";
+  const notice = document.getElementById("notice");
+  if (REAL) {
+    notice.append(el("strong", {}, "실데이터 · 계수 검증 전"),
+      el("span", {}, `원본은 전북 지역 시군구명이 비어 있어, OpenStreetMap 전주시 경계 안에 있는 좌표로 전주 나무를 판정했습니다. 계수 일부는 검증 전 가정값이라 숫자는 방법 시연용으로 보고 확정값으로 인용하지 마세요.`));
+  } else {
+    notice.append(el("strong", {}, "합성 데이터"),
+      el("span", {}, "전북대 주변에 가상 도로구간 5개를 두고 만든 나무입니다. 좌표·수종·흉고는 무작위 값이며 실제 나무가 아닙니다. 계수 중 일부는 검증 전 가정값입니다."));
+  }
+  document.getElementById("foot").textContent =
+    `입력 ${R.meta.input} · 몬테카를로 ${nf(R.meta.n_draws)}회 · 구간 p${R.meta.interval[0]}–p${R.meta.interval[2]} · 계수 ${R.meta.param_version}` +
+    (REAL ? " · 경계 © OpenStreetMap contributors (ODbL)" : "");
+
+  // 요약 타일
+  const kpis = [
+    [REAL ? "전주 경계 안 원본 행" : "입력 행", nf(q.rows), "행",
+      REAL && R.meta.reported_total ? `2016년 전주시 발표 ${nf(R.meta.reported_total.count)}그루의 ${pctf(q.rows / R.meta.reported_total.count, 0)}` : "산림청 스키마 14개 항목"],
+    ["지도 표시", nf(q.on_map), "그루", `위치 사용 불가 ${nf(q.grades.X)}행 제외`],
+    ["탄소 계산", nf(q.carbon_eligible), "그루", `흉고 결측·이상 ${nf(q.grades.C)}그루 제외`],
+    ["CO₂ 저장량", nf(t.storage_t[1]), "t", `80% 범위 ${nf(t.storage_t[0])}–${nf(t.storage_t[2])} t`],
+    ["연간 CO₂ 흡수량", nf(t.seq_t[1], t.seq_t[1] < 100 ? 1 : 0), "t/년", `80% 범위 ${nf(t.seq_t[0], t.seq_t[1] < 100 ? 1 : 0)}–${nf(t.seq_t[2], t.seq_t[1] < 100 ? 1 : 0)} t/년`]
+  ];
+  const kbox = document.getElementById("kpis");
+  for (const [label, value, unit, sub] of kpis) {
+    const d = el("div", { class: "kpi" });
+    d.append(el("div", { class: "label" }, label));
+    const v = el("div", { class: "value num" }, value); v.append(el("small", {}, unit));
+    d.append(v, el("div", { class: "sub" }, sub));
+    kbox.append(d);
+  }
+
+  // 원본 데이터 확인 사항(실데이터)
+  const blockIssue = q.issues.find(i => i.code === "dbh_block");
+  if (REAL) {
+    document.getElementById("findingsSec").hidden = false;
+    const F = document.getElementById("findings");
+    const add = (fig, what, text) => { const d = el("div", { class: "finding" }); d.append(el("div", { class: "fig" }, fig), el("div", { class: "what" }, what), el("p", {}, text)); F.append(d); };
+    if (X) add(`${nf(X.national_blank_sgg_rows)}행`, "시군구명이 빈 행(전국)",
+      `전북 지역 행에 시군구명이 없어 '전주'로 검색하면 0건이 나옵니다. 좌표를 전주 경계와 겹쳐 ${nf(X.selected_rows)}행을 찾았습니다.`);
+    if (R.meta.reported_total) add(pctf(q.rows / R.meta.reported_total.count, 0), "전주시 발표 대비 수록 비율",
+      `원본의 전주 나무 ${nf(q.rows)}그루는 ${R.meta.reported_total.source} ${nf(R.meta.reported_total.count)}그루의 ${pctf(q.rows / R.meta.reported_total.count, 0)}입니다. 시점 차이가 있어 누락 규모는 전주시 대장과 대조해야 합니다.`);
+    if (blockIssue) add(pctf(blockIssue.share, 0), "흉고 일괄 입력 의심",
+      `같은 도로구간·수종에서 똑같은 흉고값이 10그루 이상 반복되는 나무의 비율입니다. 나무마다 잰 값이 아니라 구간 대표값일 가능성이 커서, 탄소 계산에서 흉고 오차를 ${nf(P.dbh_error_cv_block.value * 100)}%로 크게 잡았습니다.`);
+    if (q.uninformative_fields.length) add(`${q.uninformative_fields.length}개 항목`, "값이 모두 같은 설명 항목",
+      `${q.uninformative_fields.map(f => f.field).join(", ")}이 전부 '${q.uninformative_fields[0].value}'입니다. 입지·녹지 조건을 분석에 쓸 수 없습니다.`);
+    if (X) add(`${nf(X.national_rows)}행`, "전국 원본 행 수",
+      `공공데이터포털 소개 문구의 869,037건과 다릅니다. 좌표계는 ${Object.entries(X.national_crs).map(([k, v]) => `${k} ${nf(v)}`).join(", ")}로 섞여 있습니다.`);
+    const dd = q.dbh_digits;
+    const rows = Object.entries(dd.by_last_digit).map(([k, v]) => ({ label: `끝자리 ${k}`, v }));
+    vbar(document.getElementById("digits"), rows);
+    document.getElementById("digitNote").textContent =
+      `실측값이면 끝자리가 대체로 고르게(각 10% 안팎) 나옵니다. 전주 원본은 0과 5가 ${pctf(dd.share_0_or_5)}로, 5cm 단위 반올림이나 눈대중 입력이 많다는 뜻입니다.`;
+  }
+
+  // 지도(캔버스)
+  const N = M.id.length;
+  const canvas = document.getElementById("map"), mapbox = document.getElementById("mapbox"), tip = document.getElementById("tip");
+  const ctx = canvas.getContext("2d");
+  const minLon = Math.min(...M.lon), maxLon = Math.max(...M.lon), minLat = Math.min(...M.lat), maxLat = Math.max(...M.lat);
+  const kx = Math.cos(((minLat + maxLat) / 2) * Math.PI / 180);
+  const spanX = (maxLon - minLon) * kx || 1e-4, spanY = (maxLat - minLat) || 1e-4;
+  const aspect = Math.min(1.1, Math.max(0.55, spanY / spanX));
+  const seqMid = M.seq[1];
+  const vals = seqMid.filter(v => v !== null).sort((a, b) => a - b);
+  const qt = p => vals[Math.min(vals.length - 1, Math.floor(p * vals.length))];
+  const cuts = [qt(0.2), qt(0.4), qt(0.6), qt(0.8)];
+  const bin = v => cuts.filter(c => v >= c).length;
+  const order = [...Array(N).keys()].sort((a, b) => (M.dbh[b] || 0) - (M.dbh[a] || 0)); // 큰 나무를 먼저 그려 작은 나무가 가려지지 않게
+  const sx = new Float32Array(N), sy = new Float32Array(N);
+  let W = 0, H = 0, base = 1, view = { k: 1, tx: 0, ty: 0 }, selected = -1, hover = -1;
+  const roadCount = {};
+  M.rd.forEach(r => { roadCount[r] = (roadCount[r] || 0) + 1; });
+  const topRoads = Object.entries(roadCount).sort((a, b) => b[1] - a[1]).slice(0, REAL ? 8 : 6).map(([r]) => +r);
+  const roadCentroid = {};
+  for (const r of topRoads) { let a = 0, b = 0, c = 0; for (let i = 0; i < N; i++) if (M.rd[i] === r) { a += M.lon[i]; b += M.lat[i]; c++; } roadCentroid[r] = [a / c, b / c]; }
+  const bx = lon => (lon - minLon) * kx * base, by = lat => (maxLat - lat) * base;
+
+  function resize() {
+    const w = mapbox.clientWidth; if (!w) return;
+    W = w; H = Math.round(w * aspect);
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); canvas.style.height = H + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const pad = 18;
+    base = Math.min((W - 2 * pad) / spanX, (H - 2 * pad) / spanY);
+    fit(); draw();
+  }
+  function fit() { view = { k: 1, tx: (W - spanX * base) / 2, ty: (H - spanY * base) / 2 }; }
+  function radius(i) { const d = M.dbh[i] || 12; return (REAL ? 0.7 + d / 30 : 2.2 + d / 11) * Math.min(3, Math.sqrt(view.k)); }
+  function draw() {
+    const col = { s: [1, 2, 3, 4, 5].map(i => token(`--seq-${i}`)), surface: token("--surface"), muted: token("--muted"), ink: token("--ink"), ink2: token("--ink-2") };
+    ctx.fillStyle = col.surface; ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < N; i++) { sx[i] = bx(M.lon[i]) * view.k + view.tx; sy[i] = by(M.lat[i]) * view.k + view.ty; }
+    ctx.lineWidth = 1;
+    for (const i of order) {
+      const x = sx[i], y = sy[i];
+      if (x < -10 || y < -10 || x > W + 10 || y > H + 10) continue;
+      const r = radius(i);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832);
+      if (seqMid[i] !== null) { ctx.fillStyle = col.s[bin(seqMid[i])]; ctx.fill(); if (r > 2.5) { ctx.strokeStyle = col.surface; ctx.stroke(); } }
+      else { ctx.strokeStyle = col.muted; ctx.lineWidth = 1.5; ctx.stroke(); ctx.lineWidth = 1; }
+    }
+    ctx.font = `12px ${token("--font-body")}`; ctx.lineJoin = "round";
+    for (const r of topRoads) {
+      const [lo, la] = roadCentroid[r]; const x = bx(lo) * view.k + view.tx + 8, y = by(la) * view.k + view.ty - 8;
+      if (x < 0 || y < 12 || x > W - 40 || y > H) continue;
+      ctx.strokeStyle = col.surface; ctx.lineWidth = 4; ctx.strokeText(M.roads[r], x, y);
+      ctx.fillStyle = col.ink2; ctx.fillText(M.roads[r], x, y);
+    }
+    ctx.lineWidth = 1;
+    for (const [i, w] of [[hover, 1.5], [selected, 2]]) {
+      if (i < 0) continue;
+      ctx.beginPath(); ctx.arc(sx[i], sy[i], radius(i) + 4, 0, 6.2832); ctx.strokeStyle = col.ink; ctx.lineWidth = w; ctx.stroke();
+    }
+    // 축척 막대
+    const mPerPx = 111000 / (base * view.k);
+    const nice = [50, 100, 200, 500, 1000, 2000, 5000].find(m => m / mPerPx >= 60) || 5000;
+    const len = nice / mPerPx, x0 = 14, y0 = H - 14;
+    ctx.strokeStyle = col.muted; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.moveTo(x0, y0 - 4); ctx.lineTo(x0, y0); ctx.lineTo(x0 + len, y0); ctx.lineTo(x0 + len, y0 - 4); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.font = `11px ${token("--font-num")}`;
+    ctx.fillText(nice >= 1000 ? `${nice / 1000} km` : `${nice} m`, x0 + len + 6, y0 + 3);
+  }
+  function nearest(px, py, maxD = 10) {
+    let best = -1, bd = maxD * maxD;
+    for (let i = 0; i < N; i++) { const dx = sx[i] - px, dy = sy[i] - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }
+    return best;
+  }
+  function zoomAt(f, px, py) {
+    const k = Math.min(60, Math.max(1, view.k * f)); const r = k / view.k;
+    view.tx = px - (px - view.tx) * r; view.ty = py - (py - view.ty) * r; view.k = k;
+    if (k === 1) fit();
+    draw();
+  }
+  canvas.addEventListener("wheel", e => { e.preventDefault(); const b = canvas.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.4 : 1 / 1.4, e.clientX - b.left, e.clientY - b.top); }, { passive: false });
+  let drag = null;
+  canvas.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty, moved: false }; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointermove", e => {
+    const b = canvas.getBoundingClientRect(), px = e.clientX - b.left, py = e.clientY - b.top;
+    if (drag) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+      if (drag.moved && view.k > 1) { view.tx = drag.tx + dx; view.ty = drag.ty + dy; tip.hidden = true; draw(); return; }
+    }
+    const i = nearest(px, py);
+    if (i !== hover) { hover = i; draw(); }
+    if (i < 0) { tip.hidden = true; return; }
+    tip.innerHTML = "";
+    tip.append(el("div", { style: "font-weight:600" }, `${M.species[M.sp[i]]} · ${M.id[i]}`),
+      el("div", {}, `${M.roads[M.rd[i]]} · 흉고 ${M.dbh[i] === null ? "없음" : nf(M.dbh[i]) + " cm"}`),
+      el("div", {}, seqMid[i] !== null ? `연 ${kg(M.seq[0][i])}–${kg(M.seq[2][i])} kg CO₂ 흡수` : "탄소 미계산"));
+    tip.hidden = false;
+    let x = px + 14; if (x + 230 > W) x = px - 240;
+    tip.style.left = Math.max(0, x) + "px"; tip.style.top = (py + 14) + "px";
+  });
+  canvas.addEventListener("pointerup", e => {
+    if (drag && !drag.moved) { const b = canvas.getBoundingClientRect(); const i = nearest(e.clientX - b.left, e.clientY - b.top, 14); if (i >= 0) select(i); }
+    drag = null;
+  });
+  canvas.addEventListener("pointerleave", () => { tip.hidden = true; if (hover >= 0) { hover = -1; draw(); } });
+  document.getElementById("zin").addEventListener("click", () => zoomAt(1.8, W / 2, H / 2));
+  document.getElementById("zout").addEventListener("click", () => zoomAt(1 / 1.8, W / 2, H / 2));
+  document.getElementById("zreset").addEventListener("click", () => { fit(); draw(); });
+  new ResizeObserver(resize).observe(mapbox);
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  document.getElementById("mapDesc").textContent = (REAL
+    ? `전주 경계 안 ${nf(N)}그루입니다. `
+    : "") + "점의 색은 나무별 연간 CO₂ 흡수량 중앙값, 크기는 흉고직경입니다. 휠이나 +/− 버튼으로 확대하고, 확대한 뒤에는 끌어서 옮길 수 있습니다. 배경지도 없이 좌표만 그렸습니다.";
+  const legend = document.getElementById("legend");
+  const ramp = el("span", { class: "ramp" });
+  for (let i = 1; i <= 5; i++) ramp.append(el("i", { style: `background:var(--seq-${i})` }));
+  const lg1 = el("span", {}, `연간 흡수 ${kg(vals[0])}`); lg1.append(ramp); lg1.append(`${kg(vals[vals.length - 1])} kg CO₂ (5분위)`);
+  legend.append(lg1);
+  if (seqMid.some(v => v === null)) { const lg2 = el("span", {}); lg2.append(el("span", { class: "sw", style: "background:var(--surface);border:1.5px solid var(--muted)" }), "탄소 미계산(흉고 없음)"); legend.append(lg2); }
+  legend.append(el("span", {}, "점 크기 = 흉고직경"));
+
+  // 나무 카드
+  const panel = document.getElementById("treePanel");
+  let cond = store.get("wg-cond") || "range-limit";
+  const steps = [
+    "흉고직경으로 수종군별 상대생장식(Jenkins 등 2003)을 적용해 지상부 건중량을 구합니다.",
+    "도시 개방생육 보정(i-Tree 방식 ×0.8 전후), 뿌리 비율, 탄소 비율을 곱해 CO₂로 바꿉니다.",
+    "연간 직경생장은 i-Tree 규칙으로 구합니다: 수종 생장 유형별 표준생장 × 서리 없는 기간 × 수관 광노출, 그리고 수종 최대 흉고의 80%를 넘는 큰 나무는 생장을 줄입니다.",
+    "올해 저장량에서 1년 전(흉고 − 연간 생장량) 저장량을 빼 연간 흡수량을 구합니다.",
+    `계수·측정 오차·생장량을 ${nf(R.meta.n_draws)}번 바꿔 계산해 10%–90% 구간을 냅니다.`
+  ];
+  const gradeText = { A: "문제 없음", B: "경미", C: "탄소 계산 제외", X: "위치 사용 불가" };
+  const gradeColor = g => ({ A: "var(--good)", B: "var(--warning)", C: "var(--serious)", X: "var(--critical)" })[g];
+  function select(i) {
+    selected = i; draw();
+    const issues = (M.issues[i] || "").split(";").filter(c => c && !DATASET_WIDE.has(c));
+    const block = issues.includes("dbh_block");
+    panel.innerHTML = "";
+    const title = el("div", { class: "tree-title" });
+    title.append(el("h3", {}, M.species[M.sp[i]]), el("span", { class: "num eyebrow" }, M.id[i]));
+    const meta = el("dl", { class: "meta" });
+    const add = (k, v) => { meta.append(el("dt", {}, k)); const dd = el("dd"); dd.append(v); meta.append(dd); };
+    add("흉고직경", M.dbh[i] === null ? "없음" : `${nf(M.dbh[i])} cm`);
+    add("도로구간", M.roads[M.rd[i]]);
+    const g = M.grades[M.grade[i]];
+    const chip = el("span", { class: "chip" }); chip.append(el("span", { class: "dot", style: `background:${gradeColor(g)}` }), `등급 ${g} · ${gradeText[g]}`);
+    add("품질", chip);
+    if (issues.length) add("기록", issues.map(c => issueLabel[c] || c).join(", "));
+    if (M.stor[1][i] !== null) add("CO₂ 저장량", `${kg(M.stor[0][i])}–${kg(M.stor[2][i])} kg (중앙 ${kg(M.stor[1][i])})`);
+    panel.append(title, meta);
+
+    const segBox = el("div", { class: "seg", role: "group", "aria-label": "탄소 표시 방식(연구2 조건)" });
+    for (const [key, label] of [["single", "① 단일값"], ["range", "② 범위"], ["range-limit", "③ 범위+한계"]]) {
+      const b = el("button", { type: "button", "aria-pressed": String(cond === key) }, label);
+      b.addEventListener("click", () => { cond = key; store.set("wg-cond", key); select(i); });
+      segBox.append(b);
+    }
+    panel.append(segBox);
+    const card = el("div", { class: "card" });
+    const r = [M.seq[0][i], M.seq[1][i], M.seq[2][i]];
+    if (r[1] === null) {
+      card.append(el("p", { class: "empty" }, "흉고 값이 없어 탄소를 계산하지 않았습니다. 현장에서 흉고둘레를 재면 계산됩니다."));
+    } else if (cond === "single") {
+      card.append(el("div", { class: "k" }, "이 나무가 1년에 흡수하는 CO₂"));
+      const b = el("div", { class: "big num" }, kg(M.point_seq[i])); b.append(el("small", {}, "kg"));
+      card.append(b);
+    } else {
+      card.append(el("div", { class: "k" }, "이 나무가 1년에 흡수하는 CO₂ (추정)"));
+      const b = el("div", { class: "big num" }, `${kg(r[0])}~${kg(r[2])}`); b.append(el("small", {}, "kg"));
+      card.append(b, track(r, 0, Math.max(r[2] * 1.15, 1)));
+      if (cond === "range-limit") {
+        const lim = ["도시 생육 보정은 해외 기준을 썼고, 이 수종의 국내 도시수목 상대생장식이 아직 없어 대리식을 적용했습니다."];
+        if (block) lim.push("이 구간은 흉고가 나무마다 잰 값이 아니라 대표값으로 보여 범위를 넓게 잡았습니다.");
+        const ratio = M.dbh[i] / M.sp_dmax[M.sp[i]];
+        if (ratio > P.growth.size_decline.start) lim.push(`이 나무는 흉고가 수종 최대 흉고(${nf(M.sp_dmax[M.sp[i]], 1)} cm)의 ${nf(ratio * 100, 1)}%로 ${nf(P.growth.size_decline.start * 100)}%를 넘어, 생장을 줄여 계산했습니다.`);
+        card.append(el("p", { class: "limit" }, lim.join(" ")));
+        const det = el("details"); det.append(el("summary", {}, "산정 방법 보기"));
+        const ol = el("ol"); steps.forEach(s => ol.append(el("li", {}, s))); det.append(ol);
+        card.append(det);
+      }
+    }
+    panel.append(card);
+    const sp = R.species.find(s => s.species === M.species[M.sp[i]]);
+    if (sp) { spSel.value = sp.species; renderUncertainty(sp); }
+    if ([...pick.options].some(o => o.value === String(i))) pick.value = String(i);
+  }
+  function track(r, lo, hi) {
+    const box = el("div");
+    const tr = el("div", { class: "track", "aria-hidden": "true" });
+    const x = v => ((v - lo) / (hi - lo) * 100).toFixed(2) + "%";
+    tr.append(el("div", { class: "rail" }), el("div", { class: "band", style: `left:${x(r[0])};width:calc(${x(r[2])} - ${x(r[0])})` }),
+              el("div", { class: "mid", style: `left:${x(r[1])}` }));
+    const labs = el("div", { class: "track-labels num" });
+    labs.append(el("span", {}, `하위 10% ${kg(r[0])}`), el("span", {}, `중앙 ${kg(r[1])}`), el("span", {}, `상위 10% ${kg(r[2])}`));
+    box.append(tr, labs);
+    return box;
+  }
+
+  // 키보드 선택: 수종별 대표 나무
+  const pick = document.getElementById("pick");
+  pick.append(el("option", { value: "" }, "나무를 고르세요"));
+  const reps = [];
+  for (const sp of R.species.slice(0, 12)) {
+    const si = M.species.indexOf(sp.species); let best = -1, bd = Infinity;
+    for (let i = 0; i < N; i++) if (M.sp[i] === si && seqMid[i] !== null) { const d = Math.abs(M.dbh[i] - sp.median_dbh); if (d < bd) { bd = d; best = i; } }
+    if (best >= 0) reps.push(best);
+  }
+  const noCarbon = seqMid.findIndex(v => v === null);
+  for (const i of noCarbon >= 0 ? [...reps, noCarbon] : reps) {
+    pick.append(el("option", { value: String(i) }, `${M.species[M.sp[i]]} · ${M.id[i]} · ${M.roads[M.rd[i]]}${seqMid[i] === null ? " (흉고 없음)" : ""}`));
+  }
+  pick.addEventListener("change", () => { if (pick.value !== "") select(+pick.value); });
+
+  // 차트
+  function niceMax(v) { const e = Math.pow(10, Math.floor(Math.log10(v))); const m = v / e; return (m <= 2 ? 2 : m <= 5 ? 5 : 10) * e; }
+  function ticks(max) { const st = max / 4; return [0, st, 2 * st, 3 * st, max]; }
+  const tickText = v => (v < 1 && v > 0 ? nf(v, 2) : v < 10 && v % 1 ? nf(v, 1) : nf(v));
+
+  function hbar(container, rows, ref) {
+    container.innerHTML = "";
+    const LW = 150, W2 = 460, RH = 26, top = 8, bottom = 26;
+    const max = niceMax(Math.max(ref, ...rows.map(r => r.v)));
+    const h = top + rows.length * RH + bottom;
+    const sv = el("svg:svg", { viewBox: `0 0 ${W2} ${h}`, role: "img", "aria-label": "원천별 구간 폭 막대 차트" });
+    const x = v => LW + (v / max) * (W2 - LW - 44);
+    for (const tv of ticks(max)) {
+      sv.append(el("svg:line", { x1: x(tv), x2: x(tv), y1: top - 2, y2: h - bottom + 2, stroke: "var(--line)", "stroke-width": 1 }));
+      sv.append(el("svg:text", { x: x(tv), y: h - 8, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)", "font-family": "var(--font-num)" }, tickText(tv)));
+    }
+    rows.forEach((r, i) => {
+      const y = top + i * RH;
+      sv.append(el("svg:text", { x: LW - 8, y: y + RH / 2 + 4, "text-anchor": "end", "font-size": 12, fill: "var(--ink-2)", "font-family": "var(--font-body)" }, r.label));
+      const w = Math.max(6, x(r.v) - x(0));
+      const bar = el("svg:path", { d: `M${x(0)},${y + 6}h${w - 4}a4,4 0 0 1 4,4v${RH - 20}a4,4 0 0 1 -4,4h${-(w - 4)}z`, fill: "var(--accent)" });
+      bar.append(el("svg:title", {}, `${r.label}: ${kg(r.v)} kg CO₂/년`));
+      sv.append(bar);
+      sv.append(el("svg:text", { x: x(r.v) + 6, y: y + RH / 2 + 4, "font-size": 11.5, fill: "var(--ink-2)", "font-family": "var(--font-num)" }, kg(r.v)));
+    });
+    const rx = x(ref);
+    sv.append(el("svg:line", { x1: rx, x2: rx, y1: top - 4, y2: h - bottom + 2, stroke: "var(--ink)", "stroke-width": 1.5, "stroke-dasharray": "4 3" }));
+    sv.append(el("svg:text", { x: rx - 4, y: top + rows.length * RH + 2, "text-anchor": "end", "font-size": 11, fill: "var(--ink)", "font-family": "var(--font-body)" }, `모두 함께 ${kg(ref)}`));
+    container.append(sv);
+  }
+
+  function vbar(container, rows) {
+    container.innerHTML = "";
+    const W2 = 460, H2 = 170, L = 34, B = 22, T = 16;
+    const max = niceMax(Math.max(...rows.map(r => r.v)));
+    const sv = el("svg:svg", { viewBox: `0 0 ${W2} ${H2}`, role: "img", "aria-label": "흉고 끝자리 분포 막대 차트" });
+    const y = v => H2 - B - (v / max) * (H2 - B - T);
+    const bw = (W2 - L - 8) / rows.length;
+    for (const tv of ticks(max)) {
+      sv.append(el("svg:line", { x1: L, x2: W2 - 4, y1: y(tv), y2: y(tv), stroke: "var(--line)", "stroke-width": 1 }));
+      sv.append(el("svg:text", { x: L - 6, y: y(tv) + 4, "text-anchor": "end", "font-size": 11, fill: "var(--muted)", "font-family": "var(--font-num)" }, nf(tv * 100) + "%"));
+    }
+    sv.append(el("svg:line", { x1: L, x2: W2 - 4, y1: y(0.1), y2: y(0.1), stroke: "var(--ink)", "stroke-width": 1.2, "stroke-dasharray": "4 3" }));
+    sv.append(el("svg:text", { x: W2 - 6, y: y(0.1) - 5, "text-anchor": "end", "font-size": 11, fill: "var(--ink)", "font-family": "var(--font-body)" }, "고르게 분포하면 10%"));
+    rows.forEach((r, i) => {
+      const x0 = L + i * bw + 3, w = bw - 6, top = y(r.v), hh = H2 - B - top;
+      const bar = el("svg:path", { d: hh > 4 ? `M${x0},${H2 - B}v${-(hh - 4)}a4,4 0 0 1 4,-4h${w - 8}a4,4 0 0 1 4,4v${hh - 4}z` : `M${x0},${H2 - B}v${-hh}h${w}v${hh}z`, fill: "var(--accent)" });
+      bar.append(el("svg:title", {}, `${r.label}: ${pctf(r.v)}`));
+      sv.append(bar);
+      sv.append(el("svg:text", { x: x0 + w / 2, y: H2 - 6, "text-anchor": "middle", "font-size": 11, fill: "var(--ink-2)", "font-family": "var(--font-num)" }, r.label.replace("끝자리 ", "")));
+      if (r.v >= 0.15) sv.append(el("svg:text", { x: x0 + w / 2, y: top - 4, "text-anchor": "middle", "font-size": 11, fill: "var(--ink-2)", "font-family": "var(--font-num)" }, pctf(r.v, 0)));
+    });
+    container.append(sv);
+  }
+
+  function intervals(container, rows, unit, marker) {
+    container.innerHTML = "";
+    const LW = 150, W2 = 460, RH = 34, top = 12, bottom = 26;
+    const max = niceMax(Math.max(...rows.map(r => r.r[2]), marker ? marker.v : 0) * 1.08);
+    const h = top + rows.length * RH + bottom;
+    const sv = el("svg:svg", { viewBox: `0 0 ${W2} ${h}`, role: "img", "aria-label": "구간 비교 차트" });
+    const x = v => LW + (v / max) * (W2 - LW - 20);
+    for (const tv of ticks(max)) {
+      sv.append(el("svg:line", { x1: x(tv), x2: x(tv), y1: top - 2, y2: h - bottom + 2, stroke: "var(--line)", "stroke-width": 1 }));
+      sv.append(el("svg:text", { x: x(tv), y: h - 8, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)", "font-family": "var(--font-num)" }, tickText(tv)));
+    }
+    rows.forEach((r, i) => {
+      const y = top + i * RH + RH / 2;
+      sv.append(el("svg:text", { x: LW - 8, y: y + 4, "text-anchor": "end", "font-size": 12, fill: "var(--ink-2)", "font-family": "var(--font-body)" }, r.label));
+      const g = el("svg:g");
+      g.append(el("svg:title", {}, `${r.label}: ${kg(r.r[0])}–${kg(r.r[2])} ${unit}, 중앙 ${kg(r.r[1])}`));
+      g.append(el("svg:line", { x1: x(r.r[0]), x2: x(r.r[2]), y1: y, y2: y, stroke: "var(--accent)", "stroke-width": 2, "stroke-linecap": "round" }));
+      g.append(el("svg:line", { x1: x(r.r[0]), x2: x(r.r[0]), y1: y - 5, y2: y + 5, stroke: "var(--accent)", "stroke-width": 2 }));
+      g.append(el("svg:line", { x1: x(r.r[2]), x2: x(r.r[2]), y1: y - 5, y2: y + 5, stroke: "var(--accent)", "stroke-width": 2 }));
+      g.append(el("svg:circle", { cx: x(r.r[1]), cy: y, r: 4.5, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2 }));
+      sv.append(g);
+      sv.append(el("svg:text", { x: x(r.r[2]) + 8, y: y + 4, "font-size": 11.5, fill: "var(--ink-2)", "font-family": "var(--font-num)" }, `${kg(r.r[0])}–${kg(r.r[2])}`));
+    });
+    if (marker) {
+      const mx = x(marker.v), y0 = top - 2, y1 = h - bottom + 2;
+      sv.append(el("svg:line", { x1: mx, x2: mx, y1: y0, y2: y1, stroke: "var(--ink)", "stroke-width": 1.5, "stroke-dasharray": "4 3" }));
+      sv.append(el("svg:path", { d: `M${mx},${y0 - 7}l5,5l-5,5l-5,-5z`, fill: "var(--ink)" }));
+    }
+    container.append(sv);
+  }
+
+  const spSel = document.getElementById("spSel");
+  const dbhText = v => nf(v, v % 1 ? 1 : 0);
+  for (const sp of R.species) spSel.append(el("option", { value: sp.species }, `${sp.species} (${nf(sp.count)}그루, 흉고 ${dbhText(sp.median_dbh)} cm)`));
+  spSel.addEventListener("change", () => renderUncertainty(R.species.find(r => r.species === spSel.value)));
+  const scenLabel = { citizen_measured: "시민 실측", local_allometry: "국내 상대생장식", both: "둘 다" };
+  function renderUncertainty(sp) {
+    hbar(document.getElementById("contrib"), sp.contributions.by_source.map(r => ({ label: r.label, v: r.seq_width })), sp.contributions.all_sources_seq_width);
+    const sc = sp.scenarios;
+    intervals(document.getElementById("scen"), [{ label: "현재", r: sc.citizen_measured.before }].concat(
+      Object.keys(scenLabel).map(k => ({ label: scenLabel[k], r: sc[k].after }))), "kg CO₂/년");
+    const w = r => r[2] - r[0], base0 = w(sc.citizen_measured.before);
+    const red = k => Math.round((1 - w(sc[k].after) / base0) * 100);
+    const top = sp.contributions.by_source[0];
+    const code = top.label.charCodeAt(top.label.length - 1) - 0xac00;
+    const josa = code >= 0 && code < 11172 && code % 28 === 0 ? "가" : "이";
+    const ins = document.getElementById("insight"); ins.innerHTML = "";
+    ins.append(`${sp.species}(흉고 ${dbhText(sp.median_dbh)} cm${sp.rep_dbh_block ? ", 일괄 입력 흉고" : ""})는 `, el("b", {}, top.label), `${josa} 가장 큰 원천입니다. 범위 폭은 시민 실측만으로 `,
+      el("b", {}, `${red("citizen_measured")}%`), ", 국내 상대생장식 확보로 ", el("b", {}, `${red("local_allometry")}%`),
+      ", 둘 다 갖추면 ", el("b", {}, `${red("both")}%`), " 줄어듭니다.");
+  }
+
+  // 수종 표
+  const groupLabel = g => (P.jenkins_groups[g] || {}).label || g;
+  const growthLabel = { slow: "느림", moderate: "보통", fast: "빠름" };
+  const spT = document.getElementById("spTable");
+  spT.innerHTML = "<thead><tr><th>수종</th><th class='r'>그루</th><th class='r'>흉고 중앙값</th><th class='r'>수종 전체 연간 흡수</th><th class='r'>대표 나무 연간 흡수</th><th class='r'>단일값</th><th class='r'>흉고 일괄 입력</th><th>대리 수종군</th><th>생장</th></tr></thead>";
+  const tb = el("tbody");
+  for (const sp of R.species) {
+    const tr = el("tr");
+    const td0 = el("td"); td0.append(el("div", {}, sp.species), el("div", { class: "sci" }, sp.scientific_name));
+    const tt = sp.total_seq_t, d = tt[1] < 10 ? 2 : tt[1] < 100 ? 1 : 0;
+    tr.append(td0, el("td", { class: "r num" }, nf(sp.count)), el("td", { class: "r num" }, `${dbhText(sp.median_dbh)} cm`),
+      el("td", { class: "r num" }, `${nf(tt[1], d)} t (${nf(tt[0], d)}–${nf(tt[2], d)})`),
+      el("td", { class: "r num" }, `${kg(sp.rep_seq[1])} kg (${kg(sp.rep_seq[0])}–${kg(sp.rep_seq[2])})`),
+      el("td", { class: "r num" }, `${kg(sp.rep_point_seq)} kg`), el("td", { class: "r num" }, pctf(sp.dbh_block_share, 0)),
+      el("td", {}, groupLabel(sp.jenkins_group)), el("td", {}, growthLabel[sp.growth_class]));
+    tb.append(tr);
+  }
+  spT.append(tb);
+
+  // 도로구간 표
+  const ROAD_TOP = 15;
+  const roads = [...R.roads].sort((a, b) => b.count - a.count);
+  document.getElementById("roadDesc").textContent =
+    `나무가 많은 구간 ${Math.min(ROAD_TOP, roads.length)}곳입니다(전체 ${nf(roads.length)}개 구간). 구간 합계는 모든 나무가 같은 계수 추출값을 공유하도록 계산했습니다. 나무별 범위를 단순히 더하면 합계 범위가 틀려집니다.`;
+  const rT = document.getElementById("roadTable");
+  rT.innerHTML = "<thead><tr><th>도로구간</th><th class='r'>그루</th><th class='r'>CO₂ 저장량 (t)</th><th class='r'>연간 흡수량 (t/년)</th><th class='r'>그루당 연간 흡수 (kg)</th></tr></thead>";
+  const rb = el("tbody");
+  for (const r of roads.slice(0, ROAD_TOP)) {
+    const tr = el("tr");
+    tr.append(el("td", {}, r.key), el("td", { class: "r num" }, nf(r.count)),
+      el("td", { class: "r num" }, `${nf(r.storage_t[1], 1)} (${nf(r.storage_t[0], 1)}–${nf(r.storage_t[2], 1)})`),
+      el("td", { class: "r num" }, `${nf(r.seq_t[1], 2)} (${nf(r.seq_t[0], 2)}–${nf(r.seq_t[2], 2)})`),
+      el("td", { class: "r num" }, kg(r.seq_t[1] * 1000 / r.count)));
+    rb.append(tr);
+  }
+  rT.append(rb);
+
+  // 품질 등급
+  document.getElementById("qualityDesc").textContent = REAL
+    ? "나무마다 매긴 등급입니다. 시군구명 공란과 좌표계 변환은 원본 전체에 해당하는 특성이라 등급에 반영하지 않고 '참고'로 표시했습니다."
+    : "연구1의 품질 감사 절차를 그대로 돌린 결과입니다. 합성 샘플에는 결측·이상치·좌표계 혼재·중복을 일부러 넣었습니다.";
+  const gb = document.getElementById("gradeBar"), gl = document.getElementById("gradeLegend");
+  for (const g of ["A", "B", "C", "X"]) {
+    const n = q.grades[g];
+    if (n) gb.append(el("div", { style: `flex:${n};background:${gradeColor(g)}`, title: `등급 ${g}: ${nf(n)}행` }));
+    const c = el("span", { class: "chip" }); c.append(el("span", { class: "dot", style: `background:${gradeColor(g)}` }), `${g} ${gradeText[g]} ${nf(n)}`);
+    gl.append(c);
+  }
+  const comp = document.getElementById("completeness");
+  for (const [k, v] of Object.entries(q.completeness)) comp.append(el("dt", {}, `${k} 완전성`), el("dd", { class: "num" }, pctf(v)));
+  const iT = document.getElementById("issueTable");
+  iT.innerHTML = "<thead><tr><th>기록 항목</th><th class='r'>행</th><th class='r'>비율</th></tr></thead>";
+  const ib = el("tbody");
+  const maxIssue = Math.max(...q.issues.map(i => i.count));
+  for (const i of [...q.issues].sort((a, b) => (a.info_only - b.info_only) || (b.count - a.count))) {
+    const tr = el("tr");
+    const td = el("td"); td.append(el("span", { class: "bar-inline", style: `width:${Math.max(3, i.count / maxIssue * 80)}px` }), i.label);
+    if (i.info_only) td.append(" ", el("span", { class: "chip" }, "참고"));
+    tr.append(td, el("td", { class: "r num" }, nf(i.count)), el("td", { class: "r num" }, pctf(i.share)));
+    ib.append(tr);
+  }
+  iT.append(ib);
+
+  // 서울 대조
+  const sc = R.seoul_comparison;
+  intervals(document.getElementById("seoul"), [{ label: `우리 추정 (${sc.species_ko} ${nf(sc.dbh_cm)} cm)`, r: sc.storage_kg_c_ours }], "kg C", { v: sc.storage_kg_c_seoul });
+  const inside = sc.storage_kg_c_seoul >= sc.storage_kg_c_ours[0] && sc.storage_kg_c_seoul <= sc.storage_kg_c_ours[2];
+  const diff = Math.round((sc.storage_kg_c_seoul / sc.storage_kg_c_ours[1] - 1) * 100);
+  document.getElementById("seoulText").append("서울 트리맵은 종로구 우정국로 느티나무(흉고 33 cm)의 탄소 저장량을 ", el("b", {}, `${nf(sc.storage_lb_c, 2)} LB`),
+    `로 표시합니다. kg으로 바꾸면 ${nf(sc.storage_kg_c_seoul, 1)} kg C이고, 점선이 그 값입니다. 같은 수종·흉고를 개별 실측값으로 보고 계산한 우리 80% 구간 ${nf(sc.storage_kg_c_ours[0], 1)}–${nf(sc.storage_kg_c_ours[2], 1)} kg C ${inside ? "안에" : "밖에"} 있으며 중앙값보다 ${Math.abs(diff)}% ${diff < 0 ? "낮습니다" : "높습니다"}. 서울 화면은 이 값을 소수점 둘째 자리의 단일값으로 보여 줍니다.`);
+
+  // 계수 표
+  const pT = document.getElementById("paramTable");
+  pT.innerHTML = "<thead><tr><th>항목</th><th>값·범위</th><th>근거</th><th>상태</th></tr></thead>";
+  const pb = el("tbody");
+  const statusText = { to_verify: "확인 필요", assumption: "가정", verified: "출처 확인" };
+  const statusColor = { to_verify: "var(--warning)", assumption: "var(--serious)", verified: "var(--good)" };
+  const prow = (label, value, source, status) => {
+    const tr = el("tr");
+    const chip = el("span", { class: "chip" }); chip.append(el("span", { class: "dot", style: `background:${statusColor[status] || "var(--muted)"}` }), statusText[status] || status);
+    const tdS = el("td"); tdS.append(chip);
+    tr.append(el("td", {}, label), el("td", { class: "num" }, value), el("td", {}, source), tdS);
+    pb.append(tr);
+  };
+  const jg = P.jenkins_groups;
+  const groupsUsed = Object.entries(jg).filter(([k]) => !k.startsWith("_"));
+  prow(`상대생장식 계수(수종군 ${groupsUsed.length}개, b0/b1)`, groupsUsed.map(([, v]) => `${v.label} ${v.b0}/${v.b1}`).join(", "), jg._source, jg._status);
+  for (const key of ["urban_factor", "root_shoot_ratio", "carbon_fraction"]) { const v = P[key]; prow(v.label, `${v.low}–${v.high} (기준 ${v.center})`, v.source, v.status); }
+  for (const key of ["dbh_error_cv", "dbh_error_cv_block", "allometry_residual_sd_log", "mapping_alt_prob"]) { const v = P[key]; if (v) prow(v.label, String(v.value), v.source, v.status); }
+  const G2 = P.growth, sd = G2.standard_cm_per_yr, ff = G2.frost_free_days, cl = G2.crown_light_exposure, mx = G2.max_dbh_cm, dc = G2.size_decline;
+  prow(sd.label, `느림 ${sd.slow}, 보통 ${sd.moderate}, 빠름 ${sd.fast}`, sd.source, sd.status);
+  prow(ff.label, `${ff.low}–${ff.high} (기준 ${ff.center}, 153일 대비 ×${nf(ff.center / G2.standard_frost_free_days, 2)})`, ff.source, ff.status);
+  prow(cl.label, `부분 차광 비율 ${nf(cl.partial_prob * 100)}%`, cl.source, cl.status);
+  prow(G2.individual_rel_halfwidth.label, `±${nf(G2.individual_rel_halfwidth.value * 100)}%`, G2.individual_rel_halfwidth.source, G2.individual_rel_halfwidth.status);
+  prow(G2.dieback.label, `${nf(G2.dieback.value * 100)}%`, G2.dieback.source, G2.dieback.status);
+  prow(mx.label, `${mx.small} / ${mx.medium} / ${mx.large}`, mx.source, mx.status);
+  prow(dc.label, `${nf(dc.start * 100)}% → ${nf(dc.end * 100)}%: ×1 → ×${dc.floor}`, dc.source, dc.status);
+  pT.append(pb);
+  const sdn = R.model_notes && R.model_notes.size_decline, ltn = R.model_notes && R.model_notes.large_tree;
+  if (sdn) {
+    const mn = document.getElementById("modelNote");
+    const startPct = nf(dc.start * 100);
+    if (!sdn.slowed_trees) {
+      mn.append(`큰 나무 생장 둔화: 이 데이터에는 수종 최대 흉고의 ${startPct}%를 넘는 나무가 없어 둔화가 적용되지 않았습니다.`);
+    } else {
+      const topSp = [...sdn.by_species].sort((a, b) => b.slowed - a.slowed).slice(0, 3).map(s => `${s.species} ${nf(s.slowed)}그루`).join(", ");
+      const drop = 1 - sdn.total_seq_after_t / sdn.total_seq_before_t;
+      mn.append(`큰 나무 생장 둔화: 수종 최대 흉고의 ${startPct}%를 넘는 `, el("b", {}, `${nf(sdn.slowed_trees)}그루(${pctf(sdn.slowed_share)})`),
+        `의 생장을 i-Tree 규칙대로 줄였습니다(${topSp} 등). 단일값 기준으로 이 나무들의 연간 흡수량은 ${nf(sdn.slowed_seq_before_t, 1)} t에서 `,
+        el("b", {}, `${nf(sdn.slowed_seq_after_t, 1)} t`), `으로 줄었고, 전체로는 ${pctf(drop)} 감소입니다.`);
+      if (ltn && ltn.count) mn.append(` 흉고 ${nf(ltn.threshold_cm)} cm 이상 나무 ${nf(ltn.count)}그루는 여전히 흡수량의 ${pctf(ltn.share_seq_p50)}를 차지합니다. 대형 수종의 최대 흉고가 ${nf(mx.large, 1)} cm라 둔화 기준(${nf(mx.large * dc.start, 1)} cm)에 못 미치는 나무가 대부분이기 때문입니다.`);
+    }
+  }
+
+  // 다음 단계
+  const stepsEl = document.getElementById("steps");
+  const nextSteps = REAL ? [
+    "전주시 녹지정원과의 가로수 대장과 대조해 누락 나무와 흉고 일괄 입력 구간을 확인합니다.",
+    "흉고 측정 오차가 가장 큰 원천이므로, 시민 흉고둘레 측정 기능을 MVP 우선순위로 올립니다(범위 25% 안팎 축소).",
+    "전북대 주변 구간에서 표본 나무의 흉고·수고·수관폭·수관 광노출·고사율을 실측해 i-Tree Eco 결과(itree_eco_import.csv)와 비교합니다. 수관 광노출 실측값으로 부분 차광 비율 가정을 바꿉니다.",
+    "기상청 전주 관측소 서리 자료로 서리 없는 기간을 확정하고, Jenkins 계수 원문 대조와 수종별 성숙 수고 등급 확인 후 계수 버전을 올립니다.",
+    "행정동 경계를 받아 동 단위 집계를 추가합니다."
+  ] : [
+    "산림청 원본 CSV로 같은 명령을 다시 돌립니다.",
+    "전북대 현장 확인 때 수고·수관폭·수관 광노출·고사율을 기록하고 i-Tree Eco 결과와 비교합니다.",
+    "'가정' 계수를 문헌값으로 바꾸고 fact-checker 검토 후 버전을 올립니다."
+  ];
+  nextSteps.forEach(s => stepsEl.append(el("li", {}, s)));
+
+  // 초기 상태
+  resize();
+  const first = reps.find(i => M.species[M.sp[i]] === "느티나무") ?? reps[0];
+  if (first !== undefined) select(first);
+})();
+</script>

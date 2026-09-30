@@ -1,0 +1,21 @@
+{
+ "national_rows": 1051259,
+ "national_blank_sgg_rows": 67503,
+ "national_blank_crs_rows": 24184,
+ "national_crs": {
+  "EPSG:5186": 741268,
+  "EPSG:5179": 285807,
+  "(빈 값)": 24184
+ },
+ "sgg_count": 88,
+ "matched_by_name": 0,
+ "inside_boundary": 37972,
+ "inside_boundary_blank_sgg": 37972,
+ "inside_boundary_other_sgg": [],
+ "blank_sgg_unlocatable": 0,
+ "selected_rows": 37972,
+ "input": "data/raw/forest_service_street_trees_20250826.csv",
+ "boundary": "D:\\alcohol studies\\woori-garosu\\config\\boundaries\\jeonju_osm.geojson",
+ "boundary_source": "OpenStreetMap relation 7619919 via Nominatim",
+ "name": "전주"
+}
