@@ -16,6 +16,10 @@ GitHub Pages가 `main` 브랜치의 `docs/`를 그대로 배포한다.
 - 나무 카드: 연구2의 세 가지 탄소 표시 방식(① 단일값 ② 범위 ③ 범위+한계), 데이터로 만든 나무 이야기, 품질 등급
 - 보호자·관찰 기록: 기기(localStorage)에만 저장. 흉고둘레를 입력하면 `docs/js/carbon.js`가 브라우저에서 범위를 다시 계산한다
 - 요약: 전체·수종별 결과, 원본 데이터 감사 결과
+- 3D 지도(`docs/js/map3d.js`): '3D' 버튼을 누르면 배경지도 건물을 높이대로 세우고, 확대 15 이상에서 화면 안 가로수를
+  수종별 모양(원뿔형·둥근형·우산형)의 입체로 그린다. 색은 잎·단풍·겨울·연간 CO₂ 흡수 중에서 고른다.
+  deck.gl 9.4는 3D를 처음 켤 때만 불러온다. 원본에 수고·수관폭이 없어 높이·수관폭은 흉고로 추정한 값이다
+  (`config/tree_form.json`, 표시 전용이며 탄소 계산에는 쓰지 않음). 수종별 모양·단풍색은 `config/species.csv`에 있다.
 
 ```bash
 .venv/Scripts/python -m pipeline.export_web       # data/out/jeonju_extract → docs/data, 보고서 → docs/report

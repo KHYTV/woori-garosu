@@ -1,23 +1,23 @@
-species_ko,aliases,scientific_name,jenkins_group,alt_group,growth_class,mature_height_class,mapping_note
-느티나무,느티,Zelkova serrata,mixed_hardwood,hard_maple_oak,moderate,large,Ulmaceae. Jenkins 혼합활엽수군(느릅나무류 포함)을 대리군으로 사용
-은행나무,은행,Ginkgo biloba,mixed_hardwood,soft_maple_birch,slow,large,Jenkins에 대응 수종 없음. 목재 비중이 중간 수준이라 혼합활엽수군을 대리군으로 사용
-이팝나무,이팝,Chionanthus retusus,mixed_hardwood,soft_maple_birch,moderate,medium,Oleaceae. 물푸레나무류와 같은 혼합활엽수군을 대리군으로 사용
-벚나무,왕벚나무|벚나무류|산벚나무|왕벚,Prunus spp.,mixed_hardwood,soft_maple_birch,fast,medium,Rosaceae. Jenkins 혼합활엽수군(벚나무류 포함)
-단풍나무,단풍|당단풍나무|홍단풍,Acer palmatum,soft_maple_birch,mixed_hardwood,slow,small,소형 단풍나무. Jenkins 무른단풍·자작나무군을 대리군으로 사용
-중국단풍,중국단풍나무,Acer buergerianum,soft_maple_birch,mixed_hardwood,moderate,medium,단풍나무속. Jenkins 무른단풍·자작나무군을 대리군으로 사용
-양버즘나무,플라타너스|버즘나무|양버즘,Platanus occidentalis,mixed_hardwood,hard_maple_oak,fast,large,Jenkins 혼합활엽수군(플라타너스 포함). 원본의 '버즘나무'도 여기에 포함
-메타세쿼이아,메타세콰이어|메타세콰이아|메타세쿼이어,Metasequoia glyptostroboides,cedar_larch,pine,fast,large,낙엽성 침엽수. Jenkins 삼나무·낙엽송군을 대리군으로 사용
-회화나무,회화,Styphnolobium japonicum,mixed_hardwood,hard_maple_oak,moderate,large,Fabaceae. 혼합활엽수군을 대리군으로 사용
-히말라야시다,개잎갈나무|히말라야삼나무,Cedrus deodara,pine,cedar_larch,moderate,large,Pinaceae. Jenkins 소나무군을 대리군으로 사용
-팽나무,,Celtis sinensis,mixed_hardwood,hard_maple_oak,moderate,large,Cannabaceae. Jenkins 혼합활엽수군(팽나무속 포함)
-소나무,적송|육송,Pinus densiflora,pine,spruce,slow,large,Jenkins 소나무군
-감나무,,Diospyros kaki,mixed_hardwood,hard_maple_oak,slow,medium,Ebenaceae. Jenkins 혼합활엽수군(감나무속 포함)
-참나무,참나무류|상수리나무|신갈나무|굴참나무|대왕참나무,Quercus spp.,hard_maple_oak,mixed_hardwood,moderate,large,Jenkins 단단한단풍·참나무군
-버드나무,수양버들|능수버들|버들,Salix spp.,aspen_alder_cottonwood_willow,soft_maple_birch,fast,medium,Jenkins 사시·오리·미루·버드나무군
-삼나무,,Cryptomeria japonica,cedar_larch,pine,moderate,large,Cupressaceae. Jenkins 삼나무·낙엽송군
-아까시나무,아카시아|아카시나무,Robinia pseudoacacia,hard_maple_oak,mixed_hardwood,fast,large,Jenkins 단단한단풍·참나무군(아까시나무 포함)
-잎갈나무,낙엽송|일본잎갈나무,Larix spp.,cedar_larch,pine,fast,large,Jenkins 삼나무·낙엽송군
-모감주나무,,Koelreuteria paniculata,mixed_hardwood,soft_maple_birch,moderate,small,Sapindaceae. 혼합활엽수군을 대리군으로 사용
-향나무,,Juniperus chinensis,cedar_larch,pine,slow,medium,Cupressaceae. Jenkins 삼나무·낙엽송군을 대리군으로 사용
-목련,목련나무|백목련,Magnolia spp.,mixed_hardwood,soft_maple_birch,moderate,medium,Jenkins 혼합활엽수군(목련속 포함)
-기타,기타활엽수,(미상),mixed_hardwood,hard_maple_oak,moderate,medium,수종 미상·기타활엽수·목록에 없는 수종. 매핑 신뢰도 낮음
+species_ko,aliases,scientific_name,jenkins_group,alt_group,growth_class,mature_height_class,crown_shape,leaf_habit,autumn_color,mapping_note
+느티나무,느티,Zelkova serrata,mixed_hardwood,hard_maple_oak,moderate,large,umbrella,deciduous,#c46a2b,Ulmaceae. Jenkins 혼합활엽수군(느릅나무류 포함)을 대리군으로 사용
+은행나무,은행,Ginkgo biloba,mixed_hardwood,soft_maple_birch,slow,large,cone,deciduous,#e3b51e,Jenkins에 대응 수종 없음. 목재 비중이 중간 수준이라 혼합활엽수군을 대리군으로 사용
+이팝나무,이팝,Chionanthus retusus,mixed_hardwood,soft_maple_birch,moderate,medium,round,deciduous,#b9a24a,Oleaceae. 물푸레나무류와 같은 혼합활엽수군을 대리군으로 사용
+벚나무,왕벚나무|벚나무류|산벚나무|왕벚,Prunus spp.,mixed_hardwood,soft_maple_birch,fast,medium,round,deciduous,#c8443b,Rosaceae. Jenkins 혼합활엽수군(벚나무류 포함)
+단풍나무,단풍|당단풍나무|홍단풍,Acer palmatum,soft_maple_birch,mixed_hardwood,slow,small,round,deciduous,#c0392b,소형 단풍나무. Jenkins 무른단풍·자작나무군을 대리군으로 사용
+중국단풍,중국단풍나무,Acer buergerianum,soft_maple_birch,mixed_hardwood,moderate,medium,round,deciduous,#d4572a,단풍나무속. Jenkins 무른단풍·자작나무군을 대리군으로 사용
+양버즘나무,플라타너스|버즘나무|양버즘,Platanus occidentalis,mixed_hardwood,hard_maple_oak,fast,large,round,deciduous,#b08a3e,Jenkins 혼합활엽수군(플라타너스 포함). 원본의 '버즘나무'도 여기에 포함
+메타세쿼이아,메타세콰이어|메타세콰이아|메타세쿼이어,Metasequoia glyptostroboides,cedar_larch,pine,fast,large,cone,deciduous,#b5652d,낙엽성 침엽수. Jenkins 삼나무·낙엽송군을 대리군으로 사용
+회화나무,회화,Styphnolobium japonicum,mixed_hardwood,hard_maple_oak,moderate,large,umbrella,deciduous,#c9b13f,Fabaceae. 혼합활엽수군을 대리군으로 사용
+히말라야시다,개잎갈나무|히말라야삼나무,Cedrus deodara,pine,cedar_larch,moderate,large,cone,evergreen,,Pinaceae. Jenkins 소나무군을 대리군으로 사용
+팽나무,,Celtis sinensis,mixed_hardwood,hard_maple_oak,moderate,large,umbrella,deciduous,#c49a3a,Cannabaceae. Jenkins 혼합활엽수군(팽나무속 포함)
+소나무,적송|육송,Pinus densiflora,pine,spruce,slow,large,umbrella,evergreen,,Jenkins 소나무군
+감나무,,Diospyros kaki,mixed_hardwood,hard_maple_oak,slow,medium,round,deciduous,#d1672a,Ebenaceae. Jenkins 혼합활엽수군(감나무속 포함)
+참나무,참나무류|상수리나무|신갈나무|굴참나무|대왕참나무,Quercus spp.,hard_maple_oak,mixed_hardwood,moderate,large,umbrella,deciduous,#9a6a35,Jenkins 단단한단풍·참나무군
+버드나무,수양버들|능수버들|버들,Salix spp.,aspen_alder_cottonwood_willow,soft_maple_birch,fast,medium,round,deciduous,#c7b452,Jenkins 사시·오리·미루·버드나무군
+삼나무,,Cryptomeria japonica,cedar_larch,pine,moderate,large,cone,evergreen,,Cupressaceae. Jenkins 삼나무·낙엽송군
+아까시나무,아카시아|아카시나무,Robinia pseudoacacia,hard_maple_oak,mixed_hardwood,fast,large,round,deciduous,#c9b74a,Jenkins 단단한단풍·참나무군(아까시나무 포함)
+잎갈나무,낙엽송|일본잎갈나무,Larix spp.,cedar_larch,pine,fast,large,cone,deciduous,#c8962e,Jenkins 삼나무·낙엽송군
+모감주나무,,Koelreuteria paniculata,mixed_hardwood,soft_maple_birch,moderate,small,round,deciduous,#c99a2e,Sapindaceae. 혼합활엽수군을 대리군으로 사용
+향나무,,Juniperus chinensis,cedar_larch,pine,slow,medium,cone,evergreen,,Cupressaceae. Jenkins 삼나무·낙엽송군을 대리군으로 사용
+목련,목련나무|백목련,Magnolia spp.,mixed_hardwood,soft_maple_birch,moderate,medium,round,deciduous,#a58b45,Jenkins 혼합활엽수군(목련속 포함)
+기타,기타활엽수,(미상),mixed_hardwood,hard_maple_oak,moderate,medium,round,deciduous,#b5953f,수종 미상·기타활엽수·목록에 없는 수종. 매핑 신뢰도 낮음

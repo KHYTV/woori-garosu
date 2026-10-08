@@ -1,4 +1,5 @@
 import { circumferenceToDbh, simulateTree } from "./carbon.js";
+import { createMap3D, defaultColorMode } from "./map3d.js";
 
 const BASEMAPS = {
   light: "https://tiles.openfreemap.org/styles/positron",
@@ -40,7 +41,7 @@ const store = {
 const guardians = () => new Set(store.read("wg-guardian", []));
 const observations = id => store.read(`wg-obs-${id}`, []);
 
-let T, S, P, map, cuts = [];
+let T, S, P, FORM, map, map3d, cuts = [], seqVals = [];
 let cond = store.read("wg-cond", "range-limit");
 
 async function loadJSON(path) {
@@ -52,7 +53,8 @@ async function loadJSON(path) {
 async function main() {
   const status = $("#status");
   try {
-    [T, S, P] = await Promise.all([loadJSON("data/trees.json"), loadJSON("data/summary.json"), loadJSON("data/params.json")]);
+    [T, S, P, FORM] = await Promise.all([loadJSON("data/trees.json"), loadJSON("data/summary.json"),
+      loadJSON("data/params.json"), loadJSON("data/tree_form.json")]);
   } catch (e) {
     status.textContent = "데이터를 불러오지 못했습니다. 새로고침해 주세요.";
     throw e;
@@ -108,15 +110,14 @@ function seqColorExpr() {
 }
 
 async function setupMap() {
-  const vals = T.seq[1].filter(v => v !== null).sort((a, b) => a - b);
-  cuts = [0.2, 0.4, 0.6, 0.8].map(p => vals[Math.floor(p * vals.length)]);
-  renderLegend(vals);
+  seqVals = T.seq[1].filter(v => v !== null).sort((a, b) => a - b);
+  cuts = [0.2, 0.4, 0.6, 0.8].map(p => seqVals[Math.floor(p * seqVals.length)]);
+  renderLegend();
 
   const style = await pickStyle();
   map = new maplibregl.Map({ container: "map", style, center: JEONJU_CENTER, zoom: 11.6, minZoom: 9, maxZoom: 19,
     attributionControl: { compact: true } });
-  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
-  await new Promise(res => map.once("load", res));
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");  await new Promise(res => map.once("load", res));
   // 라벨 글꼴은 배경지도 스타일에 있는 것을 써야 한다. 없는 글꼴을 요청하면 그 타일 전체가 그려지지 않는다
   const baseFont = map.getStyle().layers
     .map(l => l.layout && l.layout["text-font"]).find(f => Array.isArray(f) && /Regular/.test(f.join(" ")));
@@ -157,13 +158,60 @@ async function setupMap() {
     map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
     map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
   }
+
+  map3d = createMap3D({
+    map, T, speciesInfo: S.species_info, form: FORM, token, cuts,
+    onSelect: i => openTree(i),
+    onStatus: text => { $("#status").textContent = text; },
+  });
+  setup3DControls();
 }
 
-function renderLegend(vals) {
+// 3D 켜기·끄기와 나무 색
+function setup3DControls() {
+  const btn = $("#toggle3d"), wrap = $("#colorModeWrap"), sel = $("#colorMode");
+  sel.value = defaultColorMode();
+  btn.addEventListener("click", async () => {
+    const turnOn = !map3d.isOn();
+    btn.disabled = true;
+    try {
+      if (turnOn) await map3d.enable(); else map3d.disable();
+      btn.setAttribute("aria-pressed", String(turnOn));
+      wrap.hidden = !turnOn;
+      if (turnOn) map3d.setColorMode(sel.value);
+      renderLegend();
+    } catch (e) {
+      $("#status").textContent = "3D를 켜지 못했습니다. 네트워크 연결을 확인해 주세요.";
+      console.error(e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  sel.addEventListener("change", () => { map3d.setColorMode(sel.value); renderLegend(); });
+}
+
+const SHAPE_ICONS = {
+  cone: "M7 1 L12.5 13 H1.5 Z",
+  round: "M7 1 A6 6 0 1 1 6.99 1 Z",
+  umbrella: "M1 9 Q7 0 13 9 Z",
+};
+function renderLegend() {
+  const vals = seqVals;
   const ramp = el("div", { class: "ramp" }, el("span", {}, `${kg(vals[0])}`),
     ...[1, 2, 3, 4, 5].map(k => el("i", { style: `background:var(--seq-${k})` })), el("span", {}, `${kg(vals[vals.length - 1])} kg`));
-  $("#legend").replaceChildren(el("div", {}, "나무별 연간 CO₂ 흡수 추정(5분위)"), ramp,
-    el("div", {}, "큰 점일수록 줄기가 굵은 나무 · 묶음 원은 나무 수"));
+  const on3d = map3d && map3d.isOn();
+  const mode = on3d ? map3d.colorMode() : "carbon";
+  const parts = [];
+  if (!on3d || mode === "carbon") parts.push(el("div", {}, "나무별 연간 CO₂ 흡수 추정(5분위)"), ramp);
+  else parts.push(el("div", {}, { leaf: "잎 색(상록수는 진한 초록)", autumn: "수종별 단풍 색(상록수는 진한 초록)", winter: "겨울: 낙엽수는 흐리게" }[mode]));
+  if (on3d) {
+    const icon = d => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 14 14"); s.setAttribute("aria-hidden", "true"); const p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", d); s.append(p); return s; };
+    parts.push(el("div", { class: "shapes" }, ...Object.entries(FORM.shapes).map(([k, v]) => el("span", {}, icon(SHAPE_ICONS[k]), v.label))),
+      el("div", { class: "note" }, "높이·수관폭은 흉고로 추정한 모양입니다(실측 아님)."));
+  } else {
+    parts.push(el("div", {}, "큰 점일수록 줄기가 굵은 나무 · 묶음 원은 나무 수"));
+  }
+  $("#legend").replaceChildren(...parts);
 }
 
 // 검색·필터·내 위치
@@ -224,12 +272,14 @@ function openTree(i, fly = false) {
     map.getSource("selected").setData({ type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "Point", coordinates: [T.lon[i], T.lat[i]] } }] });
     if (fly) map.flyTo({ center: [T.lon[i], T.lat[i]], zoom: 17.5 });
   }
+  if (map3d) map3d.setSelected(i);
   renderSheet(t);
 }
 
 function closeSheet() {
   $("#sheet").hidden = true;
   if (map) map.getSource("selected").setData({ type: "FeatureCollection", features: [] });
+  if (map3d) map3d.setSelected(-1);
   history.replaceState(null, "", location.pathname + location.search);
 }
 
@@ -282,6 +332,13 @@ function carbonCard(t) {
   return card;
 }
 
+function shapeRow(t) {
+  const g = map3d && map3d.estimate(t.i);
+  if (!g) return [];
+  const label = FORM.shapes[t.info.crown_shape]?.label || "";
+  return [el("dt", {}, "모양(추정)"), el("dd", {}, `${label} · 높이 약 ${nf(g.h)}m · 수관폭 약 ${nf(g.cw)}m`)];
+}
+
 function renderSheet(t) {
   const sheet = $("#sheet");
   const g = t.grade;
@@ -295,6 +352,7 @@ function renderSheet(t) {
     el("dl", { class: "meta" },
       el("dt", {}, "도로구간"), el("dd", {}, t.road),
       el("dt", {}, "흉고직경"), el("dd", {}, t.dbh ? `${nf(t.dbh)} cm${t.block ? " (대표값 의심)" : ""}` : "없음"),
+      ...shapeRow(t),
       el("dt", {}, "데이터 품질"), el("dd", {}, el("span", { class: "chip" }, el("span", { class: "dot", style: `background:${GRADE_COLOR[g]}` }), `등급 ${g} · ${GRADE_TEXT[g]}`))),
     el("p", { class: "story" }, storyText(t)),
     seg, carbonCard(t),

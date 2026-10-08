@@ -52,7 +52,8 @@ def export(dataset: str) -> dict:
     table = etl.load_species_table().set_index("species_ko")
     species_info = {
         s: {k: table.loc[s, k] for k in ("scientific_name", "jenkins_group", "alt_group", "growth_class",
-                                         "mature_height_class", "mapping_note")}
+                                         "mature_height_class", "crown_shape", "leaf_habit", "autumn_color",
+                                         "mapping_note")}
         for s in species
     }
     summary = {
@@ -71,6 +72,7 @@ def export(dataset: str) -> dict:
     (out / "summary.json").write_text(json.dumps(summary, **compact), encoding="utf-8")
     (out / "params.json").write_text(json.dumps(carbon.load_params(), **compact), encoding="utf-8")
     shutil.copyfile(CONFIG_DIR / "boundaries" / "jeonju_osm.geojson", out / "boundary.geojson")
+    shutil.copyfile(CONFIG_DIR / "tree_form.json", out / "tree_form.json")
 
     reports = DOCS / "report"
     reports.mkdir(parents=True, exist_ok=True)

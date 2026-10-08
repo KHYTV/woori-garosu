@@ -38,6 +38,15 @@
         <select id="speciesFilter"><option value="">모든 수종</option></select>
       </label>
       <button type="button" id="locate" class="btn ghost">내 위치</button>
+      <button type="button" id="toggle3d" class="btn ghost" aria-pressed="false">3D</button>
+      <label class="field" for="colorMode" id="colorModeWrap" hidden><span class="sr-only">나무 색</span>
+        <select id="colorMode">
+          <option value="leaf">잎 (봄·여름)</option>
+          <option value="autumn">단풍 (가을)</option>
+          <option value="winter">겨울</option>
+          <option value="carbon">연간 CO₂ 흡수</option>
+        </select>
+      </label>
     </div>
     <div class="legend" id="legend"></div>
     <div class="status" id="status" role="status">지도를 불러오는 중입니다.</div>
