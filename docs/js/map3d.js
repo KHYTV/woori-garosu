@@ -1,6 +1,8 @@
 // 3D 지도: 배경지도 건물을 세우고, 화면 안 가로수를 수종별 모양의 입체로 그린다.
 // deck.gl은 3D를 처음 켤 때만 불러온다. 나무 높이·수관폭은 흉고로 추정한 값(data/tree_form.json)이다.
 
+import { estimateForm } from "./treeform.js";
+
 const DECK_URL = "https://unpkg.com/deck.gl@9.4.0/dist.min.js";
 const MIN_ZOOM_3D = 15;
 const MAX_TREES = 6000;
@@ -90,12 +92,7 @@ export function createMap3D({ map, T, speciesInfo, form, token, cuts, onSelect, 
   for (let i = 0; i < T.id.length; i++) {
     const dbh = T.dbh[i];
     if (dbh === null) continue;
-    const info = speciesInfo[T.species[T.sp[i]]] || {};
-    const shape = form.shapes[shapeOf[T.sp[i]]];
-    const hmax = form.height.max_height_m[info.mature_height_class || "medium"];
-    const h = 1.3 + (hmax - 1.3) * (1 - Math.exp(-form.height.k * dbh));
-    const cw = Math.min((form.crown_width.a + form.crown_width.b * dbh) * shape.width_factor, h * form.crown_width.max_ratio_to_height);
-    const base = h * shape.crown_base_ratio;
+    const { h, cw, base } = estimateForm(dbh, speciesInfo[T.species[T.sp[i]]], form);
     const trunk = Math.max(dbh / 100, form.trunk.min_diameter_m) * form.trunk.display_factor;
     geom[i] = { h, cw, base, trunk };
   }

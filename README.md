@@ -20,6 +20,12 @@ GitHub Pages가 `main` 브랜치의 `docs/`를 그대로 배포한다.
   수종별 모양(원뿔형·둥근형·우산형)의 입체로 그린다. 색은 잎·단풍·겨울·연간 CO₂ 흡수 중에서 고른다.
   deck.gl 9.4는 3D를 처음 켤 때만 불러온다. 원본에 수고·수관폭이 없어 높이·수관폭은 흉고로 추정한 값이다
   (`config/tree_form.json`, 표시 전용이며 탄소 계산에는 쓰지 않음). 수종별 모양·단풍색은 `config/species.csv`에 있다.
+- 나무 한 그루 3D·AR(`docs/js/tree3d.js`): 나무 카드의 '3D로 보기 · AR'. three.js 0.186으로 수종 모양·흉고·계절에 맞는
+  모형을 만든다(봄 벚나무는 분홍 꽃, 이팝나무는 흰 꽃, 가을 단풍, 겨울 낙엽수는 가지만). 시간 슬라이더로 20년 뒤까지
+  흉고 기댓값(`carbon.js`의 `projectDbh`, i-Tree 생장 규칙)에 따른 크기와 CO₂ 저장량 범위를 보여 준다. 키 1.7m 사람 모형으로 크기를 비교한다.
+  AR은 같은 모형을 glTF로 내보내 model-viewer 4.3으로 실제 크기(`ar-scale="fixed"`)로 띄운다.
+  안드로이드 Chrome(ARCore 지원 기기, WebXR)과 아이폰·아이패드 Safari(Quick Look, USDZ 자동 변환)에서 쓸 수 있다.
+  모형을 브라우저에서 만들어 넘기기 때문에, WebXR이 안 되는 안드로이드 브라우저의 Scene Viewer 경로는 동작하지 않는다.
 
 ```bash
 .venv/Scripts/python -m pipeline.export_web       # data/out/jeonju_extract → docs/data, 보고서 → docs/report

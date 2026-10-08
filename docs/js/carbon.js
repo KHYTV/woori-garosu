@@ -100,5 +100,20 @@ export function simulateTree(tree, P, opts = {}) {
   return { storage: qs.map(q => percentile(stor, q)), seq: qs.map(q => percentile(seq, q)) };
 }
 
+// 생장 기댓값(cm/년): 표준생장 × 서리 기간 × 광노출 기댓값 × 크기 계수. 단일값과 같은 가정이다
+export function expectedGrowth(tree, P, dbh = tree.dbh) {
+  const G = P.growth;
+  const { std, dmax } = treeInputs(tree, P);
+  return std * G.frost_free_days.center / G.standard_frost_free_days * lightMean(G.crown_light_exposure)
+    * sizeFactor(dbh, dmax, G.size_decline);
+}
+
+// years년 뒤 흉고 기댓값. 해마다 크기 계수를 다시 적용한다
+export function projectDbh(tree, P, years) {
+  let d = tree.dbh;
+  for (let y = 0; y < years; y++) d += expectedGrowth(tree, P, d);
+  return d;
+}
+
 // 흉고둘레(cm, 1.2m 높이) → 흉고직경(cm)
 export const circumferenceToDbh = c => c / Math.PI;

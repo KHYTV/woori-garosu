@@ -1,5 +1,6 @@
 import { circumferenceToDbh, simulateTree } from "./carbon.js";
 import { createMap3D, defaultColorMode } from "./map3d.js";
+import { estimateForm } from "./treeform.js";
 
 const BASEMAPS = {
   light: "https://tiles.openfreemap.org/styles/positron",
@@ -117,7 +118,8 @@ async function setupMap() {
   const style = await pickStyle();
   map = new maplibregl.Map({ container: "map", style, center: JEONJU_CENTER, zoom: 11.6, minZoom: 9, maxZoom: 19,
     attributionControl: { compact: true } });
-  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");  await new Promise(res => map.once("load", res));
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");  // 배경지도 타일을 다 받을 때까지('load') 기다리지 않고, 스타일이 준비되면 바로 나무를 올린다
+  await new Promise(res => (map.isStyleLoaded() ? res() : map.once("style.load", res)));
   // 라벨 글꼴은 배경지도 스타일에 있는 것을 써야 한다. 없는 글꼴을 요청하면 그 타일 전체가 그려지지 않는다
   const baseFont = map.getStyle().layers
     .map(l => l.layout && l.layout["text-font"]).find(f => Array.isArray(f) && /Regular/.test(f.join(" ")));
@@ -332,9 +334,29 @@ function carbonCard(t) {
   return card;
 }
 
+// 나무 한 그루 3D·AR(three.js는 처음 열 때만 불러온다)
+function view3dButton(t) {
+  const btn = el("button", { type: "button", class: "btn small" }, "3D로 보기 · AR");
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "3D 준비 중";
+    try {
+      const { openTreeViewer } = await import("./tree3d.js");
+      openTreeViewer({ tree: { id: t.id, species: t.species, info: t.info, model: modelTree(t) }, P, form: FORM, token });
+    } catch (e) {
+      console.error(e);
+      $("#status").textContent = "3D 보기를 열지 못했습니다. 네트워크 연결을 확인해 주세요.";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "3D로 보기 · AR";
+    }
+  });
+  return btn;
+}
+
 function shapeRow(t) {
-  const g = map3d && map3d.estimate(t.i);
-  if (!g) return [];
+  if (!t.dbh) return [];
+  const g = estimateForm(t.dbh, t.info, FORM);
   const label = FORM.shapes[t.info.crown_shape]?.label || "";
   return [el("dt", {}, "모양(추정)"), el("dd", {}, `${label} · 높이 약 ${nf(g.h)}m · 수관폭 약 ${nf(g.cw)}m`)];
 }
@@ -355,6 +377,7 @@ function renderSheet(t) {
       ...shapeRow(t),
       el("dt", {}, "데이터 품질"), el("dd", {}, el("span", { class: "chip" }, el("span", { class: "dot", style: `background:${GRADE_COLOR[g]}` }), `등급 ${g} · ${GRADE_TEXT[g]}`))),
     el("p", { class: "story" }, storyText(t)),
+    t.dbh ? el("div", { class: "row" }, view3dButton(t)) : null,
     seg, carbonCard(t),
     guardianBlock(t));
   sheet.hidden = false;
