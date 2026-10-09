@@ -14,10 +14,21 @@
 <body class="study">
 <main class="study-main" id="admin">
   <h1>연구4 실험 관리</h1>
-  <p class="notice">이 화면은 <b>이 기기 브라우저에 저장된 응답</b>만 보여 줍니다. 실험에 쓴 기기마다 이 화면을 열어 내보낸 뒤 합쳐 주세요. 서버 저장은 아직 없습니다.</p>
+  <section id="onlineSec" hidden>
+    <h2>온라인 응답 현황 (Supabase)</h2>
+    <div class="tablebox"><table class="admin-table" id="onlineCounts"></table></div>
+    <p class="hint" id="onlineNote"></p>
+    <div class="admin-actions"><button type="button" class="btn ghost" id="refreshOnline">새로 고침</button></div>
+    <p class="hint">개별 응답 원자료는 Supabase 대시보드 → Table Editor → <span class="num">study_responses_flat</span>에서 CSV로 내보냅니다(문항별 열로 펼쳐져 있음). 이 화면은 집계만 보여 줍니다.</p>
+  </section>
+  <p class="notice" id="localNotice"></p>
   <section>
-    <h2>응답 현황</h2>
+    <h2>이 기기에 저장된 응답</h2>
     <div class="tablebox"><table class="admin-table" id="counts"></table></div>
+    <div class="admin-actions" id="pendingBox" hidden>
+      <span class="hint" id="pendingNote"></span>
+      <button type="button" class="btn small" id="resend">서버로 다시 보내기</button>
+    </div>
   </section>
   <section>
     <h2>내보내기</h2>

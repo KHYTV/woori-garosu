@@ -2,7 +2,7 @@
 // 세 조건 모두 같은 설명문을 보고, 이미지·몰입형은 같은 모형의 그림을 더 본다(정보량은 같고 표현 방식만 다름).
 import { createTreeScene, treeFacts, SEASONS, MAX_YEARS } from "../js/tree3d.js";
 import { mulberry32 } from "../js/carbon.js";
-import { newPid, nextCondition, saveRecord } from "./records.js";
+import { configureBackend, flush, newPid, nextCondition, saveRecord, syncPending } from "./records.js";
 
 const app = document.getElementById("app");
 const bar = document.getElementById("progressBar");
@@ -59,6 +59,11 @@ async function main() {
   let same = 0;
   for (let k = 0; k < T.id.length; k++) if (T.rd[k] === T.rd[i] && T.sp[k] === T.sp[i]) same++;
   facts = { now: treeFacts(tree, P, FORM, 0), future: treeFacts(tree, P, FORM, MAX_YEARS), sameRoad: same };
+
+  // 서버(Supabase) 설정. 개발 중에는 localhost에서만 ?backend=&backendkey=로 바꿔 끼울 수 있다
+  const dev = ["localhost", "127.0.0.1"].includes(location.hostname);
+  configureBackend(dev && params.get("backend") ? { url: params.get("backend"), key: params.get("backendkey") || "dev" } : C.backend);
+  syncPending(); // 이 기기에 남은 미전송 응답이 있으면 다시 보낸다
 
   const forced = params.get("cond");
   const condition = C.conditions.includes(forced) ? forced : nextCondition(C.conditions);
@@ -187,7 +192,7 @@ async function stimulusScreen() {
     if (left <= 0) { clearInterval(tick); next.disabled = false; next.textContent = "다음"; }
     else next.textContent = `다음 (${left}초 후)`;
   }, 250);
-  next.addEventListener("click", () => {
+  next.addEventListener("click", async () => {
     record.stimulus_ms = Math.round(performance.now() - t0);
     record.interactions = cond === "immersive" ? ix : {};
     if (scene) scene.dispose();
@@ -200,6 +205,9 @@ async function stimulusScreen() {
       const u = new URL(survey);
       u.searchParams.set("pid", record.pid);
       u.searchParams.set("cond", record.condition);
+      next.disabled = true;
+      next.textContent = "저장 중";
+      await flush(record.pid, 4000); // 외부 설문으로 넘어가기 전에 서버 저장을 잠깐 기다린다
       location.href = u.toString();
       return;
     }
@@ -288,11 +296,27 @@ function doneScreen() {
   record.completed_at = now();
   record.status = "complete";
   const saved = saveRecord(record);
+  const status = el("p", { class: "hint", role: "status" }, "응답을 저장하는 중입니다. 잠시만 기다려 주세요.");
+  const retry = el("button", { type: "button", class: "btn ghost small", hidden: true }, "다시 보내기");
   show(el("div", { class: "done" },
     el("h1", {}, "참여해 주셔서 감사합니다"),
     el("p", {}, "아래 참여 번호를 연구자에게 알려 주세요."),
     el("div", { class: "code" }, record.pid),
-    saved ? null : el("p", { class: "hint" }, "이 브라우저에서는 응답을 저장하지 못했습니다. 연구자에게 알려 주세요.")));
+    status, el("div", {}, retry)));
+  const confirm = async () => {
+    retry.hidden = true;
+    status.textContent = "응답을 저장하는 중입니다. 잠시만 기다려 주세요.";
+    const ok = await flush(record.pid);
+    if (ok) status.textContent = saved ? "응답이 저장되었습니다. 이 창을 닫아도 됩니다." : "응답이 서버에 저장되었습니다. 이 창을 닫아도 됩니다.";
+    else {
+      status.textContent = saved
+        ? "인터넷 연결 문제로 서버 저장이 늦어지고 있습니다. 응답은 이 기기에 보관했고 다음에 이 페이지를 열면 다시 보냅니다."
+        : "응답을 저장하지 못했습니다. 인터넷 연결을 확인하고 '다시 보내기'를 눌러 주세요.";
+      retry.hidden = false;
+    }
+  };
+  retry.addEventListener("click", () => { syncPending(); confirm(); });
+  confirm();
 }
 
 main();

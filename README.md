@@ -40,9 +40,28 @@ GitHub Pages가 `main` 브랜치의 `docs/`를 그대로 배포한다.
   몰입형 조건은 같은 모형을 돌리고 계절·시간을 바꿀 수 있는 3D를 더 본다. AR은 노출 조건을 맞추려고 끈다.
 - 배정: 기기별 블록 무작위(세 조건을 섞은 묶음을 차례로 소진). `?cond=text|image|immersive`로 고정하면 'forced'로 기록
 - 기록: 노출 시간, 몰입형 조작(회전·계절 변경·시간 변경·본 계절·최대 연도), 문항 응답, 회상 정답 여부, 주의 점검, 화면 크기·터치 여부
-- 저장: 서버가 없어 **실험 기기 브라우저(localStorage)**에 저장하고 연구자 화면에서 내보낸다. 실험실 기기 운영을 전제로 한다.
-  온라인으로 받으려면 `study.json`의 `external_survey_url`(또는 `?survey=`)에 외부 설문 주소를 넣는다.
-  자극물 뒤 그 주소로 참여 번호(`pid`)와 조건(`cond`)만 넘긴다.
+- 저장: 응답은 항상 기기 브라우저(localStorage)에 먼저 저장하고, `study.json`의 `backend`(Supabase)가 설정돼 있으면
+  단계마다 서버로도 보낸다. 실패한 전송은 기기에 '미전송'으로 남겨 다음 접속 때나 연구자 화면에서 다시 보낸다.
+  `backend`를 비워 두면 기기 저장만 한다(실험실 기기 운영).
+  외부 설문(Qualtrics 등)을 쓰려면 `external_survey_url`(또는 `?survey=`)에 주소를 넣는다. 자극물 뒤 참여 번호(`pid`)와 조건(`cond`)만 넘긴다.
+
+#### Supabase 연결
+
+1. supabase.com에서 프로젝트를 만든다(지역은 Northeast Asia (Seoul) 권장).
+2. 대시보드 → SQL Editor에 `supabase/study_schema.sql` 내용을 붙여 넣고 실행한다(다시 실행해도 안전).
+   문항을 바꾸면 `python -m pipeline.study_sql`로 다시 만들고 다시 실행한다.
+3. Project Settings → API Keys에서 Project URL과 **Publishable key**(또는 legacy anon key)를 `docs/study/study.json`의
+   `backend.url`, `backend.key`에 넣고 배포한다. **secret / service_role 키는 넣지 않는다**(공개 저장소다).
+4. 원자료는 대시보드 Table Editor의 `study_responses_flat`(문항별 열)에서 CSV로 내보낸다.
+
+보안: 응답 표(`study_responses`)는 RLS를 켜고 정책을 두지 않아 공개 키로는 읽기·쓰기가 안 된다.
+참가자 화면은 `submit_study_record` 함수만 부르며(참여 번호 형식·실험 ID 검사, 64KB 제한, 완료된 응답 덮어쓰기 금지),
+연구자 화면은 `study_counts`로 조건별 집계만 본다. 공개 키로 아무나 가짜 응답을 넣을 수는 있으므로
+분석 전에 회차(`session`)·시각·주의 점검으로 걸러 낸다. 무료 플랜 프로젝트는 일정 기간 요청이 없으면 일시 정지되므로
+수집 기간에는 대시보드에서 상태를 확인한다.
+
+개발용 가짜 서버: `python tests/mock_supabase.py 8791` 후
+`http://localhost:8790/study/?backend=http://localhost:8791&backendkey=test` (localhost에서만 주소로 서버를 바꿀 수 있음).
 - 주소 옵션: `?session=회차이름`(기록에 남음), `?minsec=5`(시범 실행용 노출 시간, 실제 값은 기록에 남음)
 - 동의서·문항은 `study/study.json`의 초안이다. IRB 승인 문구와 검증된 척도 번안본으로 바꾼 뒤 본 실험에 쓴다.
   대상 나무는 `tree_id`(현재 명륜1길 느티나무 83428)로 바꾼다.

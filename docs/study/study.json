@@ -8,6 +8,12 @@
   "min_exposure_sec": 60,
   "allow_ar": false,
   "external_survey_url": "",
+  "backend": {
+    "type": "supabase",
+    "url": "",
+    "key": "",
+    "note": "url은 Supabase 프로젝트 주소(https://xxxx.supabase.co), key는 공개용 키(Publishable key 또는 legacy anon key)만 넣는다. secret/service_role 키는 절대 넣지 않는다. 비워 두면 이 기기에만 저장한다."
+  },
   "consent": {
     "title": "가로수 정보 이해 연구 참여 안내",
     "paragraphs": [
