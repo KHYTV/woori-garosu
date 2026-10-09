@@ -53,7 +53,7 @@ def export(dataset: str) -> dict:
     species_info = {
         s: {k: table.loc[s, k] for k in ("scientific_name", "jenkins_group", "alt_group", "growth_class",
                                          "mature_height_class", "crown_shape", "leaf_habit", "autumn_color",
-                                         "mapping_note")}
+                                         "autumn_color_name", "mapping_note")}
         for s in species
     }
     summary = {

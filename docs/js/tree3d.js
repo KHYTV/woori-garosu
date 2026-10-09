@@ -191,20 +191,147 @@ function el(tag, attrs = {}, ...kids) {
 }
 
 /**
+ * 한 나무의 사실(지금과 years년 뒤). 뷰어 정보 칸과 연구4 실험의 공통 설명문이 같은 값을 쓴다.
+ * tree: { id, species, info, model }
+ */
+export function treeFacts(tree, P, form, years = 0) {
+  const model = { ...tree.model };
+  const dbh = years ? projectDbh(model, P, years) : model.dbh;
+  const shape = estimateForm(dbh, tree.info, form);
+  const storage = simulateTree({ ...model, dbh }, P, { n: 1500 }).storage;
+  const seq = simulateTree({ ...model, dbh }, P, { n: 1500 }).seq;
+  return { years, dbh, h: shape.h, cw: shape.cw, storage, seq, growth: expectedGrowth(model, P, dbh) };
+}
+
+/**
+ * three.js 장면만 만든다(화면 UI 없음). 뷰어와 실험 모드가 같이 쓴다.
+ * opts.interactive=false면 돌리기 조작 없이 정지 이미지(snapshot)용으로 쓴다.
+ */
+export function createTreeScene(container, { tree, P, form, token, interactive = true, onChange }) {
+  const species = tree.species, info = tree.info, seed = hashSeed(tree.id);
+  const modelTree = { ...tree.model };
+  let season = seasonForMonth(), years = 0, current = null;
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: !interactive });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.append(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(token("--bg") || "#f3f5f1");
+  scene.add(new THREE.HemisphereLight(0xe6eef5, 0x8a7f6a, 1.2));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.7);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  scene.add(sun, sun.target);
+
+  // 20년 뒤 크기까지 화면에 들어오게 카메라를 맞춘다
+  const maxForm = estimateForm(projectDbh(modelTree, P, MAX_YEARS), info, form);
+  const span = Math.max(maxForm.h, maxForm.cw);
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(Math.max(maxForm.cw * 1.1, 6), 48),
+    new THREE.MeshStandardMaterial({ color: token("--accent-soft") || "#e2ede5", roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+  const person = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, PERSON_HEIGHT - 0.4, 4, 8), new THREE.MeshStandardMaterial({ color: 0x7d877f, roughness: 0.9 }));
+  person.position.set(maxForm.cw / 2 + 1.6, PERSON_HEIGHT / 2, 0.6);
+  person.castShadow = true;
+  scene.add(person);
+  Object.assign(sun.position, { x: span, y: span * 2, z: span * 0.8 });
+  const sc = sun.shadow.camera;
+  Object.assign(sc, { left: -span, right: span, top: span, bottom: -span, near: 0.5, far: span * 6 });
+  sc.updateProjectionMatrix();
+
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
+  const target = new THREE.Vector3(0, maxForm.h * 0.45, 0);
+  const controls = interactive ? new OrbitControls(camera, renderer.domElement) : null;
+  const fitCamera = () => {
+    const vfov = THREE.MathUtils.degToRad(camera.fov);
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
+    const width = Math.max(maxForm.cw, person.position.x * 2 + 1);
+    const dist = Math.max((maxForm.h * 0.62) / Math.tan(vfov / 2), (width * 0.62) / Math.tan(hfov / 2)) + 2;
+    camera.position.copy(target).addScaledVector(new THREE.Vector3(1, 0.42, 1.1).normalize(), dist);
+    camera.lookAt(target);
+    if (controls) controls.update();
+  };
+  if (controls) {
+    controls.target.copy(target);
+    controls.enableDamping = false;
+    controls.minDistance = 2;
+    controls.maxDistance = span * 5;
+    controls.maxPolarAngle = Math.PI * 0.495;
+  }
+
+  const render = () => renderer.render(scene, camera);
+  if (controls) controls.addEventListener("change", render);
+  let fitted = false;
+  const setSize = (w, h) => {
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  };
+  const resize = () => {
+    const w = container.clientWidth, h = container.clientHeight;
+    if (!w || !h) return;
+    setSize(w, h);
+    if (!fitted) { fitCamera(); fitted = true; } // 처음 한 번만. 이후엔 사용자가 돌린 시점을 지킨다
+    render();
+  };
+  const ro = new ResizeObserver(resize);
+  ro.observe(container);
+
+  function rebuild() {
+    if (current) { scene.remove(current.group); disposeObject(current.group); }
+    const dbh = years ? projectDbh(modelTree, P, years) : modelTree.dbh;
+    current = { ...buildTree({ species, info, dbh, form, season, seed }), dbh };
+    scene.add(current.group);
+    render();
+    if (onChange) onChange({ season, years, dbh, h: current.h, cw: current.cw });
+  }
+  rebuild();
+  resize();
+
+  return {
+    controls,
+    get season() { return season; },
+    get years() { return years; },
+    get current() { return current; },
+    setSeason(s) { season = s; rebuild(); },
+    setYears(y) { years = y; rebuild(); },
+    // 정해진 계절·시점의 정지 이미지(PNG data URL). 같은 시점에서 찍어 이미지 조건끼리 구도가 같다
+    snapshot({ season: s, years: y, width = 720, height = 540 }) {
+      season = s; years = y;
+      setSize(width, height);
+      fitCamera();
+      rebuild();
+      return renderer.domElement.toDataURL("image/png");
+    },
+    dispose() {
+      ro.disconnect();
+      if (controls) controls.dispose();
+      if (current) disposeObject(current.group);
+      disposeObject(scene);
+      renderer.dispose();
+      renderer.domElement.remove();
+    },
+  };
+}
+
+/**
  * 전체 화면 뷰어를 연다.
- * ctx: { tree: {id, species, info, dbh, block, ...modelTree 필드}, P, form, token }
+ * ctx: { tree: {id, species, info, model}, P, form, token }
  */
 export function openTreeViewer({ tree, P, form, token }) {
   const species = tree.species, info = tree.info;
-  const seed = hashSeed(tree.id);
-  let season = seasonForMonth(), years = 0, current = null, arUrl = null;
+  let arUrl = null;
 
   const stage = el("div", { class: "viewer-stage" });
   const info3d = el("div", { class: "viewer-info", "aria-live": "polite" });
   const yearOut = el("output", { for: "yearRange", class: "num" }, "지금");
   const yearRange = el("input", { type: "range", id: "yearRange", min: "0", max: String(MAX_YEARS), step: "1", value: "0", "aria-label": "몇 년 뒤 모습" });
+  const startSeason = seasonForMonth();
   const seasonSeg = el("div", { class: "seg", role: "group", "aria-label": "계절" },
-    ...SEASONS.map(([key, label]) => el("button", { type: "button", "data-season": key, "aria-pressed": String(key === season) }, label)));
+    ...SEASONS.map(([key, label]) => el("button", { type: "button", "data-season": key, "aria-pressed": String(key === startSeason) }, label)));
   const arBtn = el("button", { type: "button", class: "btn" }, "AR로 내 앞에 놓기 (실제 크기)");
   const arBox = el("div", { class: "ar-box", hidden: true });
   const closeBtn = el("button", { type: "button", class: "close", "aria-label": "3D 보기 닫기" }, "×");
@@ -222,110 +349,33 @@ export function openTreeViewer({ tree, P, form, token }) {
   document.body.append(root);
   document.body.style.overflow = "hidden";
 
-  // 렌더러·장면
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  stage.append(renderer.domElement);
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(token("--bg") || "#f3f5f1");
-  scene.add(new THREE.HemisphereLight(0xe6eef5, 0x8a7f6a, 1.2));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.7);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  scene.add(sun, sun.target);
-
-  // 20년 뒤 크기까지 화면에 들어오게 카메라를 맞춘다
-  const modelTree = { ...tree.model };
-  const dbhFuture = projectDbh(modelTree, P, MAX_YEARS);
-  const maxForm = estimateForm(dbhFuture, info, form);
-  const span = Math.max(maxForm.h, maxForm.cw);
-  const groundR = Math.max(maxForm.cw * 1.1, 6);
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(groundR, 48), new THREE.MeshStandardMaterial({ color: token("--accent-soft") || "#e2ede5", roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-  const person = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, PERSON_HEIGHT - 0.4, 4, 8), new THREE.MeshStandardMaterial({ color: 0x7d877f, roughness: 0.9 }));
-  person.position.set(maxForm.cw / 2 + 1.6, PERSON_HEIGHT / 2, 0.6);
-  person.castShadow = true;
-  scene.add(person);
-  Object.assign(sun.position, { x: span, y: span * 2, z: span * 0.8 });
-  const sc = sun.shadow.camera;
-  Object.assign(sc, { left: -span, right: span, top: span, bottom: -span, near: 0.5, far: span * 6 });
-  sc.updateProjectionMatrix();
-
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, maxForm.h * 0.45, 0);
-  // 화면 비율에 맞춰 20년 뒤 나무 전체(높이·수관폭)가 들어오는 거리로 카메라를 놓는다. 처음 한 번만 맞춘다
-  let fitted = false;
-  const fitCamera = () => {
-    const vfov = THREE.MathUtils.degToRad(camera.fov);
-    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
-    const width = Math.max(maxForm.cw, person.position.x * 2 + 1);
-    const dist = Math.max((maxForm.h * 0.62) / Math.tan(vfov / 2), (width * 0.62) / Math.tan(hfov / 2)) + 2;
-    const dir = new THREE.Vector3(1, 0.42, 1.1).normalize();
-    camera.position.copy(controls.target).addScaledVector(dir, dist);
-    controls.update();
-    fitted = true;
-  };
-  controls.enableDamping = false;
-  controls.minDistance = 2;
-  controls.maxDistance = span * 5;
-  controls.maxPolarAngle = Math.PI * 0.495;
-  controls.update();
-
-  const render = () => renderer.render(scene, camera);
-  controls.addEventListener("change", render);
-  const resize = () => {
-    const w = stage.clientWidth, h = stage.clientHeight;
-    if (!w || !h) return;
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    if (!fitted) fitCamera();
-    render();
-  };
-  const ro = new ResizeObserver(resize);
-  ro.observe(stage);
-
-  const nowRange = simulateTree(modelTree, P, { n: 1500 }).storage;
-  function rebuild() {
-    if (current) { scene.remove(current.group); disposeObject(current.group); }
-    const dbh = years ? projectDbh(modelTree, P, years) : modelTree.dbh;
-    current = { ...buildTree({ species, info, dbh, form, season, seed }), dbh };
-    scene.add(current.group);
-    if (arUrl) { URL.revokeObjectURL(arUrl); arUrl = null; arBox.hidden = true; arBox.replaceChildren(); }
-    render();
-    updateInfo();
-  }
-  function updateInfo() {
-    const c = current;
+  const now = treeFacts(tree, P, form, 0);
+  const updateInfo = ({ season, years }) => {
+    const f = years ? treeFacts(tree, P, form, years) : now;
     const lines = [
-      el("div", {}, `${years ? `${years}년 뒤` : "지금"} · 흉고 약 ${nf(c.dbh)}cm · 높이 약 ${nf(c.h)}m · 수관폭 약 ${nf(c.cw)}m`),
-      el("div", {}, `지금 저장한 CO₂ ${kg(nowRange[0])}~${kg(nowRange[2])}kg (추정)`),
+      el("div", {}, `${years ? `${years}년 뒤` : "지금"} · 흉고 약 ${nf(f.dbh)}cm · 높이 약 ${nf(f.h)}m · 수관폭 약 ${nf(f.cw)}m`),
+      el("div", {}, `지금 저장한 CO₂ ${kg(now.storage[0])}~${kg(now.storage[2])}kg (추정)`),
     ];
     if (years) {
-      const fut = simulateTree({ ...modelTree, dbh: c.dbh }, P, { n: 1500 }).storage;
-      lines.push(el("div", {}, `${years}년 뒤 저장 CO₂ ${kg(fut[0])}~${kg(fut[2])}kg, 그동안 약 ${kg(fut[1] - nowRange[1])}kg 더 저장(중앙값 기준)`));
-      lines.push(el("div", { class: "hint" }, `해마다 흉고가 약 ${nf(expectedGrowth(modelTree, P, c.dbh), 1)}cm 자란다고 본 기댓값입니다. 실제 생장은 관리와 환경에 따라 다릅니다.`));
+      lines.push(el("div", {}, `${years}년 뒤 저장 CO₂ ${kg(f.storage[0])}~${kg(f.storage[2])}kg, 그동안 약 ${kg(f.storage[1] - now.storage[1])}kg 더 저장(중앙값 기준)`));
+      lines.push(el("div", { class: "hint" }, `해마다 흉고가 약 ${nf(f.growth, 1)}cm 자란다고 본 기댓값입니다. 실제 생장은 관리와 환경에 따라 다릅니다.`));
     }
     if (season === "winter" && info.leaf_habit !== "evergreen") lines.push(el("div", { class: "hint" }, "겨울에는 잎이 떨어져 가지만 보입니다."));
     info3d.replaceChildren(...lines);
-  }
+    if (arUrl) { URL.revokeObjectURL(arUrl); arUrl = null; arBox.hidden = true; arBox.replaceChildren(); }
+  };
+  const view = createTreeScene(stage, { tree, P, form, token, onChange: updateInfo });
 
   seasonSeg.addEventListener("click", e => {
     const b = e.target.closest("button[data-season]");
     if (!b) return;
-    season = b.dataset.season;
     for (const x of seasonSeg.querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b));
-    rebuild();
+    view.setSeason(b.dataset.season);
   });
   yearRange.addEventListener("input", () => {
-    years = Number(yearRange.value);
-    yearOut.textContent = years ? `${years}년 뒤` : "지금";
-    rebuild();
+    const y = Number(yearRange.value);
+    yearOut.textContent = y ? `${y}년 뒤` : "지금";
+    view.setYears(y);
   });
 
   // AR: 현재 모형을 glTF로 내보내 model-viewer에 넘긴다. AR 시작은 model-viewer 버튼(사용자 탭)으로 한다
@@ -334,7 +384,7 @@ export function openTreeViewer({ tree, P, form, token }) {
     arBox.hidden = false;
     arBox.replaceChildren(el("p", { class: "hint" }, "AR 모형을 준비하는 중입니다."));
     try {
-      const [glb] = await Promise.all([new GLTFExporter().parseAsync(current.group, { binary: true }), loadModelViewer()]);
+      const [glb] = await Promise.all([new GLTFExporter().parseAsync(view.current.group, { binary: true }), loadModelViewer()]);
       arUrl = URL.createObjectURL(new Blob([glb], { type: "model/gltf-binary" }));
       const mv = el("model-viewer", {
         src: arUrl, alt: `${species} 추정 모형`, ar: true, "ar-modes": "webxr scene-viewer quick-look",
@@ -360,11 +410,7 @@ export function openTreeViewer({ tree, P, form, token }) {
   });
 
   function close() {
-    ro.disconnect();
-    controls.dispose();
-    if (current) disposeObject(current.group);
-    disposeObject(scene);
-    renderer.dispose();
+    view.dispose();
     if (arUrl) URL.revokeObjectURL(arUrl);
     root.remove();
     document.body.style.overflow = "";
@@ -374,8 +420,7 @@ export function openTreeViewer({ tree, P, form, token }) {
   document.addEventListener("keydown", onKey);
   closeBtn.addEventListener("click", close);
   closeBtn.focus();
-
-  rebuild();
-  resize();
   return { close };
 }
+
+export { SEASONS, MAX_YEARS, el };

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>연구4 실험 관리</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;650&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="study.css">
+</head>
+<body class="study">
+<main class="study-main" id="admin">
+  <h1>연구4 실험 관리</h1>
+  <p class="notice">이 화면은 <b>이 기기 브라우저에 저장된 응답</b>만 보여 줍니다. 실험에 쓴 기기마다 이 화면을 열어 내보낸 뒤 합쳐 주세요. 서버 저장은 아직 없습니다.</p>
+  <section>
+    <h2>응답 현황</h2>
+    <div class="tablebox"><table class="admin-table" id="counts"></table></div>
+  </section>
+  <section>
+    <h2>내보내기</h2>
+    <div class="admin-actions">
+      <button type="button" class="btn" id="csv">CSV 저장</button>
+      <button type="button" class="btn ghost" id="json">JSON 저장</button>
+    </div>
+    <p class="hint" id="exportNote"></p>
+  </section>
+  <section>
+    <h2>시범 실행(조건 고정)</h2>
+    <p class="hint">아래 링크는 조건을 고정해 시작합니다. 본 실험에서는 조건 없는 주소(<span class="num">study/</span>)를 쓰면 기기별로 세 조건이 번갈아 무작위 배정됩니다. 주소 끝에 <span class="num">?session=이름</span>을 붙이면 회차 이름이 함께 기록됩니다.</p>
+    <ul id="pilot"></ul>
+  </section>
+  <section>
+    <h2>설정</h2>
+    <dl class="meta" id="config"></dl>
+  </section>
+  <section>
+    <h2>기록 지우기</h2>
+    <p class="hint">내보낸 뒤에만 지우세요. 지운 응답은 되살릴 수 없습니다. 지우려면 아래 칸에 <b>삭제</b>라고 입력하세요.</p>
+    <div class="admin-actions">
+      <label class="field" for="confirmText"><span class="sr-only">확인 문구</span><input id="confirmText" type="text" autocomplete="off" placeholder="삭제"></label>
+      <button type="button" class="btn danger" id="clear" disabled>이 기기의 응답 모두 지우기</button>
+    </div>
+  </section>
+</main>
+<script type="module" src="admin.js"></script>
+</body>
+</html>
