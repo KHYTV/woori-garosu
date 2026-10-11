@@ -186,14 +186,14 @@ function show(name) {
 }
 const setTitle = text => { $("#topbarTitle").textContent = text; };
 // 뒤로 가기: 앱 안에서 온 길이 있으면 그 길로, 처음 열었으면 상위 화면으로
-const TITLES = { city: "전주 현황", near: "동네 찾기", sns: "내 나무", tree: "나무", chat: "대화", group: "보호자 방" };
-const PARENT = { city: "#intro", near: "#city", sns: "#city", tree: "#sns", chat: "#tree", group: "#tree" };
+const TITLES = { city: "전주 현황", near: "동네 찾기", sns: "내 나무", tree: "나무", chat: "대화", group: "보호자 방", photo: "사진과 캐릭터", ar: "AR 보기" };
+const PARENT = { city: "#intro", near: "#city", sns: "#city", tree: "#sns", chat: "#tree", group: "#tree", photo: "#tree", ar: "#photo" };
 const navStack = [];
 function goBack() {
   const [name, arg] = (location.hash.slice(1) || "intro").split("/");
   if (navStack.length > 1) { navStack.pop(); navStack.pop(); history.back(); return; }
   const parent = PARENT[name] || "#intro";
-  go(parent === "#tree" && arg ? `#tree/${arg}` : parent);
+  go(arg && ["#tree", "#photo"].includes(parent) ? `${parent}/${arg}` : parent);
 }
 function route() {
   const [name, arg] = (location.hash.slice(1) || "intro").split("/");
@@ -206,8 +206,11 @@ function route() {
   else if (name === "tree" && id) renderTree(id);
   else if (name === "chat" && id) renderChat(id);
   else if (name === "group" && id) renderGroup(id);
+  else if (name === "photo" && id) renderPhoto(id);
+  else if (name === "ar" && id) renderAR(id);
   else { renderIntro(); show("intro"); return; }
   if (name !== "group") { clearInterval(pollTimer); pollTimer = null; }
+  if (name !== "ar") stopCamera();
   show(name);
 }
 const go = hash => { location.hash = hash; };
@@ -229,6 +232,14 @@ function levelOf(points) {
   for (const l of ACT.levels) if (points >= l.min) lv = l;
   const next = ACT.levels.find(l => l.min > points);
   return { name: lv.name, next: next ? next.min - points : null };
+}
+const MOOD_KO = { happy: "기분 좋아요", thirsty: "목이 말라요", hot: "더워요", cold: "추워요", sleepy: "겨울잠 중", proud: "뿌듯해요", sad: "오랜만이에요" };
+const SEASON_KO = { spring: "봄", summer: "여름", autumn: "가을", winter: "겨울" };
+// 잘리지 않은 캐릭터 전신 그림
+function figure(rec, { size = 140, mood = "happy", caption = null } = {}) {
+  const f = el("figure", { class: "tree-fig sway" }, svg(treeSVG({ species: rec.species, info: rec.info, dbh: rec.dbh || 15, form: FORM, season, style: "character", mood, seed: hashSeed(rec.id), size, label: rec.name || rec.species })));
+  if (caption !== null) f.append(el("figcaption", {}, caption));
+  return f;
 }
 function avatar(rec, { size = 56, mood = "happy", style = "character" } = {}) {
   const a = el("span", { class: "avatar", style: `--size:${size}px` });
@@ -472,8 +483,9 @@ function pickNear(i, item) {
   const mine = myTree(r.id);
   const card = $("#nearCard");
   card.replaceChildren(el("div", { class: "card tree-card" },
-    el("div", { class: "tree-card-head" }, avatar(r, { size: 72, style: "character" }),
-      el("div", {}, el("h2", {}, mine ? `${mine.name} (${r.species})` : r.species), el("div", { class: "id" }, `${r.road}${r.dong ? " · " + r.dong : ""} · 관리번호 ${r.id}`))),
+    el("div", { class: "tree-card-head" }, figure(mine || r, { size: 120, caption: mine ? mine.name : "캐릭터" }),
+      el("div", {}, el("h2", {}, mine ? `${mine.name} (${r.species})` : r.species), el("div", { class: "id" }, `${r.road}${r.dong ? " · " + r.dong : ""} · 관리번호 ${r.id}`),
+        el("p", { class: "small" }, mine ? "이미 내 나무예요." : "친구가 되면 이 캐릭터가 내 나무가 돼요."))),
     el("dl", { class: "meta" },
       el("dt", {}, "흉고직경"), el("dd", {}, r.dbh ? `${nf(r.dbh)}cm${r.block ? " (대표값 의심)" : ""}` : "없음"),
       el("dt", {}, "모양(추정)"), el("dd", {}, r.dbh ? `높이 약 ${nf(r.heightM)}m` : "-"),
@@ -513,10 +525,13 @@ function dialog(title, body, { confirm = "확인", cancel = "취소", onConfirm 
 function befriend(r) {
   const names = NICKNAMES[archetype(r.species, r.info)] || NICKNAMES.generic;
   const input = el("input", { type: "text", name: "name", maxlength: "12", required: true, value: names[Math.floor(Math.random() * names.length)], "aria-label": "나무 이름" });
+  const preview = figure(r, { size: 150, mood: "proud", caption: input.value });
+  input.addEventListener("input", () => { preview.querySelector("figcaption").textContent = input.value || "…"; });
   dialog("나무 이름 짓기", el("div", { class: "dialog-body" },
+    el("div", { class: "preview" }, preview),
     el("p", {}, `${r.road}의 ${josa(r.species, "과", "와")} 친구가 돼요. 이름을 지어 주세요.`),
-    el("div", { class: "row" }, input, ...names.map(n => el("button", { type: "button", class: "chip btn-chip", onclick: () => { input.value = n; } }, n))),
-    el("p", { class: "hint" }, "보호자 기록은 이 기기의 브라우저에만 저장돼요(온라인 저장은 준비 중).")), {
+    el("div", { class: "row" }, input, ...names.map(n => el("button", { type: "button", class: "chip btn-chip", onclick: () => { input.value = n; input.dispatchEvent(new Event("input")); } }, n))),
+    el("p", { class: "hint" }, cloudOn() ? "내 나무는 이 기기에 저장되고, 온라인에도 올라가요." : "보호자 기록은 이 기기의 브라우저에 저장돼요.")), {
     confirm: "친구 맺기",
     onConfirm: async form => {
       const name = form.name.value.trim();
@@ -560,8 +575,10 @@ async function renderSNS() {
     return acc;
   }, { year: 0, practice: 0, protected: 0, points: 0 });
   const lv = levelOf(totals.points);
-  const stories = el("div", { class: "stories" }, ...state.my.map(t => el("a", { class: "story", href: `#tree/${encodeURIComponent(t.id)}` }, avatar(t, { size: 60, mood: treeMood(t, postsOf(t.id)) }), el("span", {}, t.name))),
-    el("a", { class: "story add", href: "#near" }, el("span", { class: "avatar plus", style: "--size:60px" }, "+"), el("span", {}, "친구 추가")));
+  const stories = el("div", { class: "my-trees" }, ...state.my.map(t => {
+    const mood = treeMood(t, postsOf(t.id));
+    return el("a", { class: "my-tree", href: `#tree/${encodeURIComponent(t.id)}` }, figure(t, { size: 120, mood }), el("b", {}, t.name), el("span", { class: "sub" }, `${t.species} · ${MOOD_KO[mood]}`));
+  }), el("a", { class: "my-tree add", href: "#near" }, el("span", { class: "add-box" }, "+"), el("b", {}, "친구 추가")));
   const feed = el("div", { class: "feed" }, ...(state.posts.length ? state.posts.map(postCard) : [el("p", { class: "empty" }, "아직 기록이 없어요. 나무를 눌러 돌봄이나 생활 실천을 기록해 보세요.")]));
   box.replaceChildren(el("div", { class: "page-inner" },
     el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "4단계 · 나무 SNS"), el("h1", {}, "내 나무")), weatherChip()),
@@ -614,16 +631,17 @@ async function renderTree(id) {
   setTitle(t.name);
   box.replaceChildren(el("div", { class: "page-inner" },
     el("div", { class: "row end" }, weatherChip()),
-    el("div", { class: "profile-head" }, avatar(t, { size: 120, mood }),
+    el("div", { class: "profile-head" }, figure(t, { size: 150, mood }),
       el("div", { class: "profile-info" }, nameBtn,
         el("div", { class: "sub" }, `${t.species} · ${t.road}${t.dong ? " · " + t.dong : ""}`),
         el("div", { class: "sub" }, `친구 ${days}일째 · ${lv.name} · ${nf(t.points || 0)}점`),
-        el("div", { class: "mood" }, { happy: "기분 좋아요", thirsty: "목이 말라요", hot: "더워요", cold: "추워요", sleepy: "겨울잠 중", proud: "뿌듯해요", sad: "오랜만이에요" }[mood]))),
+        el("div", { class: "mood" }, MOOD_KO[mood]))),
     el("div", { class: "actions" },
       el("a", { class: "btn", href: `#chat/${encodeURIComponent(id)}` }, "💬 메시지"),
       el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care") }, "🌳 돌봄 기록"),
       el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "practice") }, "🌱 생활 실천"),
       el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care", "observe") }, "📷 사진 올리기"),
+      el("a", { class: "btn ghost", href: `#photo/${encodeURIComponent(id)}` }, "🖼️ 사진·캐릭터·AR"),
       view3dButton(t)),
     coGuardianBlock(t),
     el("div", { class: "kpis tight" },
@@ -683,24 +701,168 @@ function openActivity(t, kind, presetId = null) {
   renderForm();
   dialog(kind === "care" ? `${t.name} 돌봄 기록` : "생활 실천 기록", el("div", { class: "dialog-body" }, list, formBox), { confirm: "기록하기", onConfirm: async form => {
     if (!picked) { toast("활동을 골라 주세요.", true); return false; }
-    const todayCount = postsOf(t.id).filter(p => p.activity === picked.id && dayKey(new Date(p.t)) === dayKey(new Date())).length;
-    if (todayCount >= ACT.daily_limit_per_tree) { toast(`오늘은 '${picked.label}'을(를) 이미 ${todayCount}번 기록했어요.`, true); return false; }
     const file = form.photo?.files?.[0];
     let photo = null;
     if (file) { try { photo = await compressImage(file); } catch (e) { toast(e.message, true); return false; } }
     const circ = form.circ ? Number(form.circ.value) || null : null;
-    const post = { treeId: t.id, t: new Date().toISOString(), kind, activity: picked.id, label: picked.label, icon: picked.icon, points: picked.points, kg: picked.kg || 0, text: (form.text.value || "").trim(), photo, circ };
-    await db.addPost(post);
-    const points = (t.points || 0) + picked.points;
-    await db.putTree({ id: t.id, name: t.name, since: t.since, points });
-    await refreshMine();
-    const fresh = myTree(t.id), posts = postsOf(t.id);
-    syncPost(post, fresh);
-    const ctx = { ...chatContext(fresh), protectedKg: protectedKg(fresh, posts), practiceKg: practiceKg(posts), points, gainedPoints: picked.points, gainedKg: picked.kg || 0 };
-    await db.addMessage({ treeId: t.id, t: new Date().toISOString(), from: "tree", text: reaction({ ...picked, kind }, ctx) });
+    const post = await saveActivity(t, kind, picked, { photo, circ, text: (form.text.value || "").trim() });
+    if (!post) return false;
     toast(`기록했어요 · +${picked.points}점${picked.kg ? ` · −${massText(picked.kg)}` : ""}`);
-    if (location.hash.startsWith("#chat/")) renderChat(t.id); else renderTree(t.id);
+    // 사진을 올리면 실제 나무와 캐릭터를 나란히 보여 준다
+    if (photo) go(`#photo/${encodeURIComponent(t.id)}`);
+    else if (location.hash.startsWith("#chat/")) renderChat(t.id);
+    else renderTree(t.id);
   } });
+}
+// 활동 한 건 저장: 하루 한도 → 게시물 → 점수 → 서버 전송 → 나무의 반응. 실패하면 null
+async function saveActivity(t, kind, picked, { photo = null, circ = null, text = "", ar = false } = {}) {
+  const todayCount = postsOf(t.id).filter(p => p.activity === picked.id && dayKey(new Date(p.t)) === dayKey(new Date())).length;
+  if (todayCount >= ACT.daily_limit_per_tree) { toast(`오늘은 '${picked.label}'을(를) 이미 ${todayCount}번 기록했어요.`, true); return null; }
+  const post = { treeId: t.id, t: new Date().toISOString(), kind, activity: picked.id, label: picked.label, icon: picked.icon, points: picked.points, kg: picked.kg || 0, text, photo, circ, ar };
+  await db.addPost(post);
+  const points = (t.points || 0) + picked.points;
+  await db.putTree({ id: t.id, name: t.name, since: t.since, points });
+  await refreshMine();
+  const fresh = myTree(t.id), posts = postsOf(t.id);
+  syncPost(post, fresh);
+  const ctx = { ...chatContext(fresh), protectedKg: protectedKg(fresh, posts), practiceKg: practiceKg(posts), points, gainedPoints: picked.points, gainedKg: picked.kg || 0 };
+  await db.addMessage({ treeId: t.id, t: new Date().toISOString(), from: "tree", text: reaction({ ...picked, kind }, ctx) });
+  return post;
+}
+
+// ---------- 사진 · 캐릭터 · AR ----------
+let arStream = null;
+function stopCamera() {
+  if (!arStream) return;
+  for (const tr of arStream.getTracks()) tr.stop();
+  arStream = null;
+}
+const photosOf = id => postsOf(id).filter(p => p.photo);
+
+// 실제 나무 사진과 캐릭터를 나란히
+async function renderPhoto(id) {
+  await refreshMine();
+  const t = myTree(id);
+  const box = $("#s-photo");
+  if (!t) { go(`#tree/${encodeURIComponent(id)}`); return; }
+  setTitle(`${t.name} · 사진과 캐릭터`);
+  const photos = photosOf(id);
+  const mood = treeMood(t, postsOf(id));
+  let current = photos[0] || null;
+  const realPane = el("div", { class: "pane real" });
+  const renderReal = () => {
+    realPane.replaceChildren(current
+      ? el("img", { src: URL.createObjectURL(current.photo), alt: `${t.name} 실제 사진` })
+      : el("div", { class: "pane-empty" }, el("p", {}, "아직 실제 사진이 없어요."), el("button", { type: "button", class: "btn small", onclick: () => openActivity(t, "care", "observe") }, "📷 찍어 올리기")),
+      el("div", { class: "pane-label" }, current ? `실제 나무 · ${new Date(current.t).toLocaleDateString("ko-KR")}${current.ar ? " · AR" : ""}` : "실제 나무"));
+  };
+  renderReal();
+  const charPane = el("div", { class: "pane char sway" }, svg(treeSVG({ species: t.species, info: t.info, dbh: t.dbh || 15, form: FORM, season, style: "character", mood, seed: hashSeed(t.id), size: 220, label: t.name })),
+    el("div", { class: "pane-label" }, `${t.name} 캐릭터 · ${SEASON_KO[season]} · ${MOOD_KO[mood]}`));
+  const thumbs = el("div", { class: "thumbs" }, ...photos.map(p => el("button", { type: "button", class: "thumb", "aria-pressed": String(p === current), "data-pid": p.pid,
+    onclick: () => { current = p; renderReal(); for (const b of thumbs.children) b.setAttribute("aria-pressed", String(Number(b.dataset.pid) === p.pid)); } },
+    el("img", { src: URL.createObjectURL(p.photo), alt: "" }), el("span", {}, new Date(p.t).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })))));
+  box.replaceChildren(el("div", { class: "page-inner" },
+    el("p", { class: "small" }, "왼쪽은 보호자가 찍은 실제 나무, 오른쪽은 같은 나무의 캐릭터예요. 캐릭터는 계절과 오늘 기분에 따라 바뀌어요."),
+    el("div", { class: "compare" }, realPane, charPane),
+    photos.length > 1 ? thumbs : null,
+    el("div", { class: "actions" },
+      el("a", { class: "btn", href: `#ar/${encodeURIComponent(id)}` }, "✨ AR로 같이 보기"),
+      el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care", "observe") }, "📷 사진 올리기"),
+      view3dButton(t)),
+    el("p", { class: "hint" }, "'AR로 같이 보기'는 카메라 화면에 캐릭터를 세워 실제 나무와 함께 찍는 화면이에요. '3D · AR'은 실제 크기의 3D 모형을 띄워요.")));
+}
+
+// 카메라 화면 위에 캐릭터를 세워 실제 나무와 함께 찍는다
+async function renderAR(id) {
+  await refreshMine();
+  const t = myTree(id);
+  const box = $("#s-ar");
+  if (!t) { go(`#tree/${encodeURIComponent(id)}`); return; }
+  setTitle(`${t.name} AR 보기`);
+  stopCamera();
+  const mood = treeMood(t, postsOf(id));
+  const stage = el("div", { class: "ar-stage" });
+  const video = el("video", { autoplay: true, playsinline: true, muted: true, class: "ar-video" });
+  const still = el("img", { class: "ar-video", hidden: true, alt: "" });
+  const charSvg = svg(treeSVG({ species: t.species, info: t.info, dbh: t.dbh || 15, form: FORM, season, style: "character", mood, seed: hashSeed(t.id), size: 160, label: t.name }));
+  const char = el("div", { class: "ar-char" }, charSvg);
+  stage.append(video, still, char);
+  const pos = { x: 0.5, y: 0.82, scale: 1 }; // 화면 비율 좌표(발끝 기준)
+  const place = () => { const w = stage.clientWidth, h = stage.clientHeight; char.style.left = `${pos.x * w}px`; char.style.top = `${pos.y * h}px`; char.style.transform = `translate(-50%, -100%) scale(${pos.scale})`; };
+  let drag = null, pinch = null;
+  char.addEventListener("pointerdown", e => { drag = { x0: e.clientX, y0: e.clientY, x: pos.x, y: pos.y }; char.setPointerCapture(e.pointerId); });
+  char.addEventListener("pointermove", e => {
+    if (!drag) return;
+    const r = stage.getBoundingClientRect();
+    pos.x = Math.min(1, Math.max(0, drag.x + (e.clientX - drag.x0) / r.width));
+    pos.y = Math.min(1.05, Math.max(0.15, drag.y + (e.clientY - drag.y0) / r.height));
+    place();
+  });
+  for (const ev of ["pointerup", "pointercancel"]) char.addEventListener(ev, () => { drag = null; });
+  stage.addEventListener("touchstart", e => { if (e.touches.length === 2) pinch = { d: Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY), s: pos.scale }; }, { passive: true });
+  stage.addEventListener("touchmove", e => {
+    if (!pinch || e.touches.length !== 2) return;
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    pos.scale = Math.min(2.5, Math.max(0.4, pinch.s * d / pinch.d)); size.value = pos.scale; place();
+  }, { passive: true });
+  stage.addEventListener("touchend", () => { pinch = null; }, { passive: true });
+  const size = el("input", { type: "range", min: "0.4", max: "2.5", step: "0.05", value: "1", "aria-label": "캐릭터 크기" });
+  size.addEventListener("input", () => { pos.scale = Number(size.value); place(); });
+  const status = el("p", { class: "small ar-status" }, "카메라를 여는 중…");
+  const file = el("input", { type: "file", accept: "image/*", hidden: true });
+  let source = null; // "camera" | "image"
+  file.addEventListener("change", () => {
+    const f = file.files[0];
+    if (!f) return;
+    stopCamera(); video.hidden = true; still.hidden = false; still.src = URL.createObjectURL(f); source = "image";
+    status.textContent = "고른 사진 위에 캐릭터를 끌어다 놓고 '찍어서 올리기'를 누르세요.";
+  });
+  async function startCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) { status.textContent = "이 브라우저는 카메라를 지원하지 않아요. 사진을 골라 캐릭터를 얹어 볼 수 있어요."; return; }
+    try {
+      arStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false });
+      video.srcObject = arStream; video.hidden = false; still.hidden = true; source = "camera";
+      status.textContent = "실제 나무에 카메라를 맞추고, 캐릭터를 끌어서 나무 옆에 세운 뒤 찍어 주세요.";
+    } catch {
+      status.textContent = "카메라를 쓸 수 없어요(권한 또는 기기). 대신 사진을 골라 캐릭터를 얹어 볼 수 있어요.";
+    }
+  }
+  const capture = async () => {
+    if (!source) { file.click(); return; }
+    const srcEl = source === "camera" ? video : still;
+    const sw = source === "camera" ? video.videoWidth : still.naturalWidth, sh = source === "camera" ? video.videoHeight : still.naturalHeight;
+    if (!sw || !sh) { toast("아직 화면이 준비되지 않았어요.", true); return; }
+    const c = document.createElement("canvas");
+    const scale = Math.min(1, 1280 / Math.max(sw, sh));
+    c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
+    const ctx = c.getContext("2d");
+    ctx.drawImage(srcEl, 0, 0, c.width, c.height);
+    // 화면(object-fit: cover)에서 캐릭터가 놓인 자리를 원본 좌표로 옮긴다
+    const r = stage.getBoundingClientRect(), cr = charSvg.getBoundingClientRect();
+    const k = Math.max(r.width / c.width, r.height / c.height), offX = (r.width - c.width * k) / 2, offY = (r.height - c.height * k) / 2;
+    const img = new Image();
+    const url = URL.createObjectURL(new Blob([charSvg.outerHTML], { type: "image/svg+xml" }));
+    try {
+      await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error("캐릭터를 그리지 못했어요.")); img.src = url; });
+      ctx.drawImage(img, (cr.left - r.left - offX) / k, (cr.top - r.top - offY) / k, cr.width / k, cr.height / k);
+    } finally { URL.revokeObjectURL(url); }
+    const blob = await new Promise(res => c.toBlob(res, "image/jpeg", 0.85));
+    const observe = ACT.care.find(a => a.id === "observe");
+    const post = await saveActivity(t, "care", observe, { photo: blob, text: "캐릭터와 함께 찍은 AR 사진", ar: true });
+    if (post) { toast(`AR 사진을 올렸어요 · +${observe.points}점`); go(`#photo/${encodeURIComponent(id)}`); }
+  };
+  box.replaceChildren(el("div", { class: "ar-wrap" }, stage,
+    el("div", { class: "ar-controls" }, status,
+      el("label", { class: "range" }, "크기", size, el("output", {}, "")),
+      el("div", { class: "row" },
+        el("button", { type: "button", class: "btn", onclick: capture }, "📸 찍어서 올리기"),
+        el("button", { type: "button", class: "btn ghost", onclick: () => file.click() }, "🖼️ 사진 고르기"),
+        view3dButton(t)), file,
+      el("p", { class: "hint" }, "카메라 화면 위에 캐릭터를 얹는 방식이에요. 실제 크기의 3D 모형은 '3D · AR'(안드로이드 Chrome, iOS Safari)로 띄워요."))));
+  requestAnimationFrame(place);
+  new ResizeObserver(place).observe(stage);
+  await startCamera();
 }
 
 // ---------- 공동보호자 ----------
