@@ -33,8 +33,26 @@ GitHub Pages가 `main` 브랜치의 `docs/`를 그대로 배포한다.
 - 점수·환산 계수(`config/activities.json` → `docs/data/activities.json`): 활동별 점수, 레벨 구간, 하루 기록 한도(나무·활동당 3회), 생활 실천의 kgCO₂e 환산 계수.
   환산 계수는 흔히 인용되는 어림값이라 `status: assumption`이고 화면에 '추정'으로 표시한다. '돌보는 동안 흡수'는 돌봄 뒤 7일 동안의 일일 흡수량 합이며
   나무가 흡수한 양이지 돌봄으로 늘어난 양이 아니다(`protection.note`).
-- 저장(`docs/js/db.js`): 내 나무·게시물(사진 Blob 포함)·대화를 IndexedDB `wg-sns`에 둔다. 서버 저장은 아직 없다. 옛 `wg-guardian`(localStorage) 보호자 기록은 처음 열 때 가져온다.
-- 공동보호자끼리의 대화와 동네 순위는 서버가 필요해 아직 없다.
+- 저장(`docs/js/db.js`): 내 나무·게시물(사진 Blob 포함)·대화를 IndexedDB `wg-sns`에 둔다. 옛 `wg-guardian`(localStorage) 보호자 기록은 처음 열 때 가져온다.
+
+#### 온라인: 공동보호자 대화와 동네 순위 (`docs/js/cloud.js`, `supabase/sns_schema.sql`)
+
+기기 저장은 그대로 두고, 참여를 켠 사람만 서버(Supabase)에 닉네임·내 나무(관리번호·이름·수종·동)·활동(종류·시각)만 올린다. 사진·메모·위치는 올리지 않는다.
+
+- 기기마다 **익명 계정**(Supabase anonymous sign-in)을 만들어 RLS가 `auth.uid()`로 자기 행만 쓰게 한다. 공개 키만으로는 아무것도 못 쓴다.
+- 점수·감축량은 클라이언트 값을 믿지 않고 `activity_catalog`(activities.json에서 생성)에서 트리거가 채운다. 하루 한도(나무·활동당 3회)와 메시지 한도(10분 30개)도 트리거가 막는다.
+- 공동보호자 방(`#group/<id>`): 같은 나무를 친구 맺은 사람끼리만 읽고 쓰는 `tree_messages` + 그 나무의 최근 활동(`tree_activity_feed`)을 한 줄 이벤트로 섞어 보여 준다. 8초마다 새 글을 가져온다.
+- 동네 순위(`dong_rankings` 보기): 최근 30일 활동을 동 단위로 모아 점수·보호자 수·감축량 순으로 매긴다. 보호자의 동은 참여할 때 고르고(내 나무의 동을 기본값으로), 활동의 동은 나무의 동이다.
+- 서버가 꺼져 있거나 참여 전이면 모든 온라인 기능은 조용히 닫혀 있고, 기록은 기기에 남아 참여하는 순간 한꺼번에 올라간다(`client_id`로 중복 방지).
+
+설정 순서:
+1. Supabase 프로젝트 → **Authentication → Sign In / Providers → Anonymous sign-ins 켜기**.
+2. SQL Editor에서 `supabase/sns_schema.sql` 실행(`python -m pipeline.sns_sql`로 다시 만들 수 있다). 연구4의 `study_schema.sql`과 같은 프로젝트여도 된다.
+3. `docs/data/backend.json`에 Project URL과 **공개 키(anon/publishable)** 를 넣고 커밋. secret/service_role 키는 절대 넣지 않는다.
+4. 익명 계정은 Authentication → Users에 쌓인다. 오래된 익명 사용자는 대시보드에서 정리한다.
+
+개발 중에는 `python tests/mock_supabase.py 8791`(가짜 서버: 익명 로그인·표 REST·트리거 규칙 흉내)을 띄우고
+`http://localhost:8790/?backend=http://localhost:8791&backendkey=test#sns`로 열면 서버 없이 전체 흐름을 볼 수 있다.
 
 ### 지도 (`docs/map.html`, `docs/js/app.js`, 연구용)
 

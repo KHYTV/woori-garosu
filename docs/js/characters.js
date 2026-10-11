@@ -68,7 +68,7 @@ function shade(hex, f) {
 }
 const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 
-function layout(type, info, dbh, form) {
+function layout(type, info, dbh, form, style = "character") {
   const shape = form?.shapes?.[info?.crown_shape] || { crown_base_ratio: 0.35 };
   const g = form && info ? estimateForm(dbh, info, form)
     : { h: 1.3 + (15 - 1.3) * (1 - Math.exp(-0.04 * dbh)), cw: 1.2 + 0.18 * dbh };
@@ -77,7 +77,12 @@ function layout(type, info, dbh, form) {
   if (type === "conifer" || type === "juniper") CW = clamp(CW * 0.6, 34, 96);
   if (type === "cedar") CW = clamp(CW * 0.8, 44, 130);
   const trunkW = clamp(5 + dbh * 0.28, 6, 34);
-  const baseRatio = type === "pine" ? 0.5 : type === "willow" ? 0.3 : clamp(shape.crown_base_ratio, 0.12, 0.5);
+  let baseRatio = type === "pine" ? 0.5 : type === "willow" ? 0.3 : clamp(shape.crown_base_ratio, 0.12, 0.5);
+  if (style === "character") {
+    // 캐릭터는 얼굴이 들어가는 수관을 크게, 줄기는 짧게 해서 더 사람처럼 보이게 한다
+    CW = clamp(CW * 1.45, 86, 184);
+    baseRatio = clamp(baseRatio * 0.55, 0.1, 0.3);
+  }
   const crownH = H * (1 - baseRatio);
   return { H, CW, trunkW, top: BASE_Y - H, crownH, crownBottom: BASE_Y - H + crownH, cx: CX };
 }
@@ -290,25 +295,29 @@ function crown(type, L, pal, rand, season, real) {
 function face(L, mood, pal, type) {
   const { cx, top, crownH, CW } = L;
   const narrow = type === "conifer" || type === "juniper" || type === "cedar";
-  const fy = top + crownH * (narrow ? 0.62 : 0.55);
-  const dx = Math.max(7, Math.min(16, CW * 0.11));
-  const er = clamp(CW * 0.045, 3.2, 6);
+  const fy = top + crownH * (narrow ? 0.6 : 0.52);
+  const dx = clamp(CW * 0.15, 10, 24);
+  const er = clamp(CW * 0.065, 5, 10);
   const ink = "#1f2a22";
   const eye = (x, closed) => closed
-    ? `<path d="M${r1(x - er)} ${r1(fy)} q${r1(er)} ${r1(er * 0.9)} ${r1(er * 2)} 0" stroke="${ink}" stroke-width="2" fill="none" stroke-linecap="round"/>`
+    ? `<path d="M${r1(x - er)} ${r1(fy)} q${r1(er)} ${r1(er * 0.9)} ${r1(er * 2)} 0" stroke="${ink}" stroke-width="${r1(clamp(er * 0.3, 2, 3))}" fill="none" stroke-linecap="round"/>`
     : `<circle cx="${r1(x)}" cy="${r1(fy)}" r="${r1(er)}" fill="#fff"/><circle cx="${r1(x + er * 0.25)}" cy="${r1(fy + er * 0.15)}" r="${r1(er * 0.55)}" fill="${ink}"/><circle cx="${r1(x + er * 0.45)}" cy="${r1(fy - er * 0.2)}" r="${r1(er * 0.18)}" fill="#fff"/>`;
   const my = fy + er * 2.2;
+  const sw = r1(clamp(er * 0.32, 2, 3.2));
   const mouth = {
-    happy: `<path d="M${r1(cx - dx * 0.7)} ${r1(my)} q${r1(dx * 0.7)} ${r1(er * 1.6)} ${r1(dx * 1.4)} 0" stroke="${ink}" stroke-width="2" fill="none" stroke-linecap="round"/>`,
+    happy: `<path d="M${r1(cx - dx * 0.7)} ${r1(my)} q${r1(dx * 0.7)} ${r1(er * 1.6)} ${r1(dx * 1.4)} 0" stroke="${ink}" stroke-width="${sw}" fill="none" stroke-linecap="round"/>`,
     proud: `<path d="M${r1(cx - dx * 0.8)} ${r1(my - 2)} q${r1(dx * 0.8)} ${r1(er * 2.4)} ${r1(dx * 1.6)} 0 z" fill="${ink}"/><path d="M${r1(cx - dx * 0.4)} ${r1(my + er * 0.9)} q${r1(dx * 0.4)} ${r1(er * 0.6)} ${r1(dx * 0.8)} 0" fill="#e47b8a"/>`,
     thirsty: `<ellipse cx="${r1(cx)}" cy="${r1(my + 2)}" rx="${r1(er * 0.7)}" ry="${r1(er * 0.9)}" fill="${ink}"/>`,
-    hot: `<path d="M${r1(cx - dx * 0.6)} ${r1(my + 2)} q${r1(dx * 0.6)} ${r1(-er)} ${r1(dx * 1.2)} 0" stroke="${ink}" stroke-width="2" fill="none" stroke-linecap="round"/>`,
-    cold: `<path d="M${r1(cx - dx * 0.6)} ${r1(my)} l${r1(dx * 0.3)} 3 l${r1(dx * 0.3)} -3 l${r1(dx * 0.3)} 3 l${r1(dx * 0.3)} -3" stroke="${ink}" stroke-width="2" fill="none" stroke-linecap="round"/>`,
+    hot: `<path d="M${r1(cx - dx * 0.6)} ${r1(my + 2)} q${r1(dx * 0.6)} ${r1(-er)} ${r1(dx * 1.2)} 0" stroke="${ink}" stroke-width="${sw}" fill="none" stroke-linecap="round"/>`,
+    cold: `<path d="M${r1(cx - dx * 0.6)} ${r1(my)} l${r1(dx * 0.3)} 3 l${r1(dx * 0.3)} -3 l${r1(dx * 0.3)} 3 l${r1(dx * 0.3)} -3" stroke="${ink}" stroke-width="${sw}" fill="none" stroke-linecap="round"/>`,
     sleepy: `<ellipse cx="${r1(cx)}" cy="${r1(my + 1)}" rx="${r1(er * 0.5)}" ry="${r1(er * 0.6)}" fill="${ink}"/>`,
-    sad: `<path d="M${r1(cx - dx * 0.6)} ${r1(my + 3)} q${r1(dx * 0.6)} ${r1(-er * 1.4)} ${r1(dx * 1.2)} 0" stroke="${ink}" stroke-width="2" fill="none" stroke-linecap="round"/>`,
+    sad: `<path d="M${r1(cx - dx * 0.6)} ${r1(my + 3)} q${r1(dx * 0.6)} ${r1(-er * 1.4)} ${r1(dx * 1.2)} 0" stroke="${ink}" stroke-width="${sw}" fill="none" stroke-linecap="round"/>`,
   }[mood] || "";
   const closed = mood === "sleepy" || mood === "proud";
   const extras = [];
+  const brow = (x, dir) => `<path d="M${r1(x - er * 0.9)} ${r1(fy - er * 1.7 + dir * er * 0.35)} q${r1(er * 0.9)} ${r1(-er * 0.45 - dir * er * 0.6)} ${r1(er * 1.8)} ${r1(-dir * er * 0.7)}" stroke="${ink}" stroke-width="${sw}" fill="none" stroke-linecap="round" opacity="0.75"/>`;
+  if (mood === "sad" || mood === "thirsty") extras.push(brow(cx - dx, -1), `<g transform="translate(${r1(cx + dx)} ${r1(fy)}) scale(-1 1) translate(${r1(-(cx + dx))} ${r1(-fy)})">${brow(cx + dx, -1)}</g>`);
+  if (mood === "proud" || mood === "hot") extras.push(brow(cx - dx, 1), `<g transform="translate(${r1(cx + dx)} ${r1(fy)}) scale(-1 1) translate(${r1(-(cx + dx))} ${r1(-fy)})">${brow(cx + dx, 1)}</g>`);
   if (mood === "thirsty" || mood === "hot") extras.push(`<path d="M${r1(cx + dx + er * 1.6)} ${r1(fy - er * 1.5)} q4 6 0 9 q-4 -3 0 -9 z" fill="#6fb6ff"/>`);
   if (mood === "hot") extras.push(`<path d="M${r1(cx - dx - er * 2.4)} ${r1(fy - er * 2)} q2 -4 0 -8 M${r1(cx - dx - er * 1.6)} ${r1(fy - er * 2)} q2 -4 0 -8" stroke="#e86a4a" stroke-width="1.6" fill="none" stroke-linecap="round"/>`);
   if (mood === "cold") extras.push(`<text x="${r1(cx + dx + er * 1.8)}" y="${r1(fy - er)}" font-size="10" fill="#6fb6ff">❄</text>`);
@@ -327,7 +336,7 @@ export function treeSVG(o) {
   const season = o.season || seasonForDate();
   const type = archetype(species, info);
   const rand = rng(o.seed ?? hashSeed(`${species}|${dbh}`));
-  const L = layout(type, info, dbh, form);
+  const L = layout(type, info, dbh, form, style);
   const pal = palette(type, info, season);
   const real = style === "real";
   const parts = [];

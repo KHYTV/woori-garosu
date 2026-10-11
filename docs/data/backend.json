@@ -1,0 +1,5 @@
+{
+  "note": "나무 SNS 온라인 부분(공동보호자 대화·동네 순위)의 Supabase 연결. url과 공개 키(anon/publishable)만 넣는다. secret/service_role 키는 절대 넣지 않는다.",
+  "url": "",
+  "key": ""
+}

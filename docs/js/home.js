@@ -7,6 +7,7 @@ import { db, compressImage } from "./db.js";
 import { greeting, proactive, reply, reaction, josa } from "./talk.js";
 import { estimateForm } from "./treeform.js";
 import { circumferenceToDbh } from "./carbon.js";
+import * as cloud from "./cloud.js";
 
 const $ = sel => document.querySelector(sel);
 const nf = (v, d = 0) => Number(v).toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -33,8 +34,8 @@ const NICKNAMES = { ginkgo: ["은행이", "노랑이", "부채"], cherry: ["벚�
 
 let T, S, P, FORM, PLACES, ACT, weather = null;
 const season = seasonForDate();
-const state = { my: [], posts: [], near: { center: null, label: "", results: [], picked: null, radius: 300 } };
-let tickTimer = null;
+const state = { my: [], posts: [], near: { center: null, label: "", results: [], picked: null, radius: 300 }, profile: null };
+let tickTimer = null, pollTimer = null;
 
 async function loadJSON(path) {
   const r = await fetch(path);
@@ -56,9 +57,116 @@ async function main() {
   for (const b of document.querySelectorAll(".tabbar a")) b.addEventListener("click", () => window.scrollTo(0, 0));
   await treesReady;
   await importLegacyGuardians();
+  await setupCloud();
   await refreshMine();
   window.addEventListener("hashchange", route);
   route();
+}
+
+// ---------- 온라인(Supabase) ----------
+async function setupCloud() {
+  let cfg = null;
+  try { cfg = await loadJSON("data/backend.json"); } catch { /* 설정 파일 없음 */ }
+  // 개발 중에는 localhost에서만 ?backend=&backendkey=로 가짜 서버를 끼울 수 있다
+  const params = new URLSearchParams(location.search);
+  const dev = ["localhost", "127.0.0.1"].includes(location.hostname);
+  if (dev && params.get("backend")) cfg = { url: params.get("backend"), key: params.get("backendkey") || "dev" };
+  cloud.configure(cfg);
+  state.profile = await db.getMeta("cloud-profile");
+  if (cloudOn()) pushPending().catch(err => console.warn("서버 동기화 실패", err));
+}
+const cloudOn = () => cloud.configured() && cloud.signedIn() && Boolean(state.profile);
+async function joinOnline(nickname, dong) {
+  await cloud.signIn();
+  const me = await cloud.api.setProfile({ nickname, dong });
+  state.profile = { nickname: me?.nickname || nickname, dong: me?.dong || dong || null };
+  await db.setMeta("cloud-profile", state.profile);
+  await pushPending();
+}
+async function leaveOnline() {
+  cloud.signOut();
+  state.profile = null;
+  await db.setMeta("cloud-profile", null);
+}
+// 기기에만 있는 내 나무·활동을 서버로 올린다(두 번 보내도 한 번만 남는다)
+async function pushPending() {
+  if (!cloudOn()) return;
+  await refreshMine();
+  for (const t of state.my) await cloud.api.follow({ id: t.id, name: t.name, species: t.species, dong: t.dong, since: t.since });
+  for (const p of state.posts) {
+    if (p.synced) continue;
+    const t = myTree(p.treeId);
+    await cloud.api.addActivity({ treeId: p.treeId, activity: p.activity, clientId: String(p.pid), dong: t?.dong, t: p.t });
+    p.synced = true;
+    await db.putPost(p);
+  }
+}
+async function syncPost(post, t) {
+  if (!cloudOn()) return;
+  try {
+    await cloud.api.addActivity({ treeId: t.id, activity: post.activity, clientId: String(post.pid), dong: t.dong, t: post.t });
+    post.synced = true;
+    await db.putPost(post);
+  } catch (err) { console.warn("활동 서버 저장 실패(나중에 다시 보냄)", err); }
+}
+function myDongGuess() {
+  const counts = new Map();
+  for (const t of state.my) if (t.dong) counts.set(t.dong, (counts.get(t.dong) || 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}
+function joinDialog() {
+  const names = ["보호자", "나무지기", "숲친구", "동네지기"];
+  const nick = el("input", { type: "text", name: "nickname", maxlength: "12", required: true, value: `${names[Math.floor(Math.random() * names.length)]}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, "aria-label": "닉네임" });
+  const dong = el("input", { type: "text", name: "dong", maxlength: "40", list: "dongList", value: myDongGuess(), placeholder: "내 동네 (예: 효자동3가)", "aria-label": "동" });
+  const list = el("datalist", { id: "dongList" }, ...PLACES.filter(p => p.kind === "dong").map(p => el("option", { value: p.name })));
+  dialog("온라인으로 함께하기", el("div", { class: "dialog-body" },
+    el("p", {}, "공동보호자와 대화하고 동네 순위에 참여해요. 서버에는 닉네임, 내 나무(관리번호·이름), 활동 종류와 시각, 동 이름만 올라가요. 사진·메모·내 위치는 올라가지 않아요."),
+    el("label", { class: "file" }, el("span", {}, "닉네임"), nick),
+    el("label", { class: "file" }, el("span", {}, "내 동네 (순위 집계용, 선택)"), dong), list,
+    el("p", { class: "hint" }, "기기마다 익명 계정이 만들어져요. 기기를 바꾸면 다른 사람으로 보여요.")), {
+    confirm: "참여하기",
+    onConfirm: async form => {
+      const n = form.nickname.value.trim();
+      if (!n) return false;
+      try { await joinOnline(n, form.dong.value.trim()); }
+      catch (err) { toast(`연결 실패: ${err.message}`, true); return false; }
+      toast(`${n}님, 온라인으로 함께해요`);
+      renderSNS();
+    },
+  });
+}
+function onlineCard() {
+  if (!cloud.configured()) {
+    return el("section", { class: "card online" }, el("div", { class: "k" }, "온라인 함께하기"),
+      el("p", { class: "limit" }, "공동보호자 대화와 동네 순위는 서버 연결 뒤에 열려요. 지금은 모든 기록이 이 기기에만 저장돼요."));
+  }
+  if (!cloudOn()) {
+    return el("section", { class: "card online" }, el("div", { class: "k" }, "온라인 함께하기"),
+      el("p", { class: "limit" }, "닉네임만 정하면 같은 나무의 공동보호자와 대화하고, 우리 동네 순위에 활동이 더해져요."),
+      el("div", { class: "row" }, el("button", { type: "button", class: "btn small", onclick: joinDialog }, "참여하기")));
+  }
+  const box = el("section", { class: "card online" }, el("div", { class: "row between" }, el("div", { class: "k" }, `온라인 · ${state.profile.nickname}${state.profile.dong ? " · " + state.profile.dong : ""}`),
+    el("button", { type: "button", class: "btn ghost small", onclick: () => dialog("온라인을 끌까요?", el("p", { class: "dialog-body" }, "이 기기의 기록은 남고, 서버에 올린 기록도 지워지지 않아요. 다시 참여하면 새 익명 계정이 돼요."), { confirm: "끄기", onConfirm: async () => { await leaveOnline(); renderSNS(); } }) }, "끄기")),
+    el("div", { id: "rankBox" }, el("p", { class: "small" }, "동네 순위를 불러오는 중…")));
+  loadRankings(box.querySelector("#rankBox"));
+  return box;
+}
+async function loadRankings(target) {
+  try {
+    const [rows, mine] = await Promise.all([cloud.api.rankings(10), cloud.api.myScore()]);
+    const me = state.profile.dong;
+    target.replaceChildren(
+      mine ? el("p", { class: "small" }, `내 활동 ${nf(mine.activities)}건 · ${nf(mine.points)}점 · 감축 ${massText(Number(mine.kg))}`) : null,
+      el("h3", {}, "동네 순위 (최근 30일)"),
+      rows?.length ? el("div", { class: "tablebox" }, el("table", { class: "rank" },
+        el("thead", {}, el("tr", {}, el("th", {}, "#"), el("th", {}, "동"), el("th", { class: "r" }, "보호자"), el("th", { class: "r" }, "활동"), el("th", { class: "r" }, "점수"), el("th", { class: "r" }, "감축"))),
+        el("tbody", {}, ...rows.map(r => el("tr", { class: r.dong === me ? "me" : null },
+          el("td", { class: "num" }, r.rank), el("td", {}, r.dong), el("td", { class: "r num" }, nf(r.guardians)), el("td", { class: "r num" }, nf(r.activities)),
+          el("td", { class: "r num" }, nf(r.points)), el("td", { class: "r num" }, massText(Number(r.kg))))))))
+        : el("p", { class: "small" }, "아직 순위에 오른 동네가 없어요. 첫 활동을 기록하면 우리 동네가 올라가요."));
+  } catch (err) {
+    target.replaceChildren(el("p", { class: "small" }, `순위를 불러오지 못했어요 (${err.message})`));
+  }
 }
 
 // ---------- 공통 ----------
@@ -82,7 +190,9 @@ function route() {
   else if (name === "sns") renderSNS();
   else if (name === "tree" && id) renderTree(id);
   else if (name === "chat" && id) renderChat(id);
+  else if (name === "group" && id) renderGroup(id);
   else { renderIntro(); show("intro"); return; }
+  if (name !== "group") { clearInterval(pollTimer); pollTimer = null; }
   show(name);
 }
 const go = hash => { location.hash = hash; };
@@ -400,6 +510,7 @@ function befriend(r) {
       await db.putTree(rec);
       await refreshMine();
       const t = myTree(r.id);
+      if (cloudOn()) cloud.api.follow({ id: t.id, name, species: t.species, dong: t.dong, since: rec.since }).catch(err => console.warn("서버 친구 맺기 실패", err));
       const ctx = chatContext(t);
       await db.addMessage({ treeId: r.id, t: new Date().toISOString(), from: "tree", text: greeting(ctx) });
       const p = proactive(ctx);
@@ -445,6 +556,7 @@ async function renderSNS() {
       kpi("돌보는 동안 흡수", ...mass(totals.protected), `돌봄 뒤 ${ACT.protection.care_effect_days}일 기준`),
       kpi("내 생활 실천 감축", ...mass(totals.practice), "실천 기록 환산(추정)"),
       kpi("기여 점수", nf(totals.points), "점", lv.next ? `${lv.name} · 다음까지 ${lv.next}점` : lv.name)),
+    onlineCard(),
     el("h2", {}, "기록"), feed));
 }
 function postCard(p) {
@@ -497,6 +609,7 @@ async function renderTree(id) {
       el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "practice") }, "🌱 생활 실천"),
       el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care", "observe") }, "📷 사진 올리기"),
       view3dButton(t)),
+    coGuardianBlock(t),
     el("div", { class: "kpis tight" },
       kpi("오늘 흡수", ...mass(todayKg), "이 나무, 오늘 하루(추정)"),
       kpi("함께한 뒤 흡수", ...mass(yearKg), `${new Date(t.since).toLocaleDateString("ko-KR")}부터`),
@@ -518,6 +631,7 @@ function renameTree(t) {
     const name = form.name.value.trim();
     if (!name) return false;
     await db.putTree({ id: t.id, name, since: t.since, points: t.points || 0 });
+    if (cloudOn()) cloud.api.follow({ id: t.id, name, species: t.species, dong: t.dong, since: t.since }).catch(() => {});
     await renderTree(t.id);
   } });
   setTimeout(() => input.select(), 50);
@@ -526,6 +640,7 @@ function unfriend(t) {
   dialog("친구를 끊을까요?", el("p", { class: "dialog-body" }, `${josa(t.name, "과", "와")}의 기록(사진·대화 포함)이 이 기기에서 지워져요.`), { confirm: "끊기", onConfirm: async () => {
     await db.deleteTree(t.id);
     await refreshMine();
+    if (cloudOn()) cloud.api.unfollow(t.id).catch(err => console.warn("서버 친구 끊기 실패", err));
     toast(`${josa(t.name, "과", "와")} 헤어졌어요`);
     go("#sns");
   } });
@@ -564,11 +679,85 @@ function openActivity(t, kind, presetId = null) {
     await db.putTree({ id: t.id, name: t.name, since: t.since, points });
     await refreshMine();
     const fresh = myTree(t.id), posts = postsOf(t.id);
+    syncPost(post, fresh);
     const ctx = { ...chatContext(fresh), protectedKg: protectedKg(fresh, posts), practiceKg: practiceKg(posts), points, gainedPoints: picked.points, gainedKg: picked.kg || 0 };
     await db.addMessage({ treeId: t.id, t: new Date().toISOString(), from: "tree", text: reaction({ ...picked, kind }, ctx) });
     toast(`기록했어요 · +${picked.points}점${picked.kg ? ` · −${massText(picked.kg)}` : ""}`);
     if (location.hash.startsWith("#chat/")) renderChat(t.id); else renderTree(t.id);
   } });
+}
+
+// ---------- 공동보호자 ----------
+function coGuardianBlock(t) {
+  const box = el("section", { class: "card co" });
+  if (!cloudOn()) {
+    box.append(el("div", { class: "k" }, "공동보호자"),
+      el("p", { class: "limit" }, cloud.configured() ? "온라인에 참여하면 이 나무를 함께 돌보는 보호자를 보고 대화할 수 있어요." : "공동보호자 대화는 서버 연결 뒤에 열려요."),
+      cloud.configured() ? el("div", { class: "row" }, el("button", { type: "button", class: "btn small", onclick: joinDialog }, "온라인 참여하기")) : null);
+    return box;
+  }
+  box.append(el("div", { class: "k" }, "공동보호자"), el("p", { class: "small", id: "coList" }, "불러오는 중…"),
+    el("div", { class: "row" }, el("a", { class: "btn small", href: `#group/${encodeURIComponent(t.id)}` }, "👥 공동보호자 대화")));
+  cloud.api.treeGuardians(t.id).then(rows => {
+    const others = (rows || []).filter(r => r.guardian_id !== cloud.userId());
+    const p = box.querySelector("#coList");
+    p.textContent = others.length ? `${others.length}명이 함께 돌봐요: ${others.map(r => `${r.nickname}(${r.tree_name})`).join(", ")}` : "아직 나 혼자 돌보고 있어요. 이웃을 초대해 보세요.";
+  }).catch(err => { box.querySelector("#coList").textContent = `불러오지 못했어요 (${err.message})`; });
+  return box;
+}
+async function renderGroup(id) {
+  await refreshMine();
+  const t = myTree(id);
+  const box = $("#s-group");
+  if (!t) { go(`#tree/${encodeURIComponent(id)}`); return; }
+  if (!cloudOn()) { box.replaceChildren(el("div", { class: "page-inner" }, el("p", { class: "empty" }, "온라인에 참여해야 공동보호자 대화를 열 수 있어요."), el("div", { class: "row" }, el("a", { class: "btn ghost", href: `#tree/${encodeURIComponent(id)}` }, "← 돌아가기")))); return; }
+  const list = el("div", { class: "msgs", role: "log", "aria-live": "polite" });
+  const mood = treeMood(t, postsOf(id));
+  let lastId = 0, lastDay = "";
+  const myId = cloud.userId();
+  const appendItem = m => {
+    const d = m.t.slice(0, 10);
+    if (d !== lastDay) { list.append(el("div", { class: "day" }, new Date(m.t).toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" }))); lastDay = d; }
+    if (m.kind === "activity") {
+      list.append(el("div", { class: "event" }, `${m.nickname}님이 ${m.label} 기록 · +${m.points}점${m.kg ? ` · −${massText(Number(m.kg))}` : ""}`));
+      return;
+    }
+    const mine = m.guardian_id === myId;
+    list.append(el("div", { class: `bubble ${mine ? "me" : "tree"}` }, mine ? null : el("span", { class: "who-avatar" }, m.nickname.slice(0, 1)),
+      el("div", { class: "bubble-body" }, mine ? null : el("b", { class: "who" }, m.nickname), el("p", {}, m.body),
+        el("time", { datetime: m.t }, new Date(m.t).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })))));
+  };
+  const load = async (first = false) => {
+    try {
+      const msgs = await cloud.api.messages(id, lastId);
+      let items = (msgs || []).map(m => ({ ...m, kind: "message" }));
+      if (first) {
+        const feed = await cloud.api.treeFeed(id, 20);
+        items = items.concat((feed || []).map(a => ({ ...a, kind: "activity" }))).sort((a, b) => (a.t < b.t ? -1 : 1));
+      }
+      if (!items.length && first) list.append(el("p", { class: "empty" }, `${t.name}의 보호자 방이에요. 함께 돌보는 이웃에게 첫 인사를 남겨 보세요.`));
+      for (const m of items) { appendItem(m); if (m.kind === "message") lastId = Math.max(lastId, m.id); }
+      if (items.length) window.scrollTo(0, document.body.scrollHeight);
+    } catch (err) { if (first) list.append(el("p", { class: "empty" }, `불러오지 못했어요 (${err.message})`)); }
+  };
+  const input = el("input", { type: "text", name: "text", maxlength: "500", placeholder: "공동보호자에게 메시지…", autocomplete: "off", "aria-label": "메시지" });
+  const composer = el("form", { class: "composer", onsubmit: async e => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    input.disabled = true;
+    try { await cloud.api.sendMessage(id, text); input.value = ""; await load(); }
+    catch (err) { toast(`보내지 못했어요: ${err.message}`, true); }
+    finally { input.disabled = false; input.focus(); }
+  } }, input, el("button", { type: "submit", class: "btn" }, "보내기"));
+  box.replaceChildren(el("div", { class: "chat" },
+    el("header", { class: "chat-head" }, el("a", { class: "back", href: `#tree/${encodeURIComponent(id)}` }, "←"), avatar(t, { size: 40, mood }),
+      el("div", {}, el("b", {}, `${t.name} 보호자 방`), el("span", { class: "sub" }, ` ${t.species} · ${t.road}`)), el("span", { class: "online" }, `● ${state.profile.nickname}`)),
+    el("p", { class: "small", style: "padding:0 16px" }, "같은 나무의 보호자끼리 보는 방이에요. 활동 기록도 여기에 보여요."),
+    list, composer));
+  await load(true);
+  clearInterval(pollTimer);
+  pollTimer = setInterval(() => { if (!document.hidden) load(); }, 8000);
 }
 
 // ---------- 대화 ----------
