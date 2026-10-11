@@ -1,7 +1,8 @@
 // 우리동네가로수 화면 흐름: 인트로 → 전주 현황 → 동네 찾기 → 나무 SNS(프로필·대화·기록)
 import { treeSVG, archetype, seasonForDate, moodFor, hashSeed } from "./characters.js";
 import { dailyUptake, dailyWeight, cumulativeThisYear, uptakeBetween, yearProfile, dayOfYear, seasonWindow } from "./daily.js";
-import { nearestTrees, searchPlaces, geocode, locate, insideJeonju, JEONJU } from "./geo.js";
+import { nearestTrees, searchPlaces, geocode, locate, insideJeonju, distanceM, JEONJU } from "./geo.js";
+import { createMiniMap } from "./minimap.js";
 import { fetchWeather, weatherLabel, careSuggestions } from "./weather.js";
 import { db, compressImage } from "./db.js";
 import { greeting, proactive, reply, reaction, josa } from "./talk.js";
@@ -219,7 +220,8 @@ const go = hash => { location.hash = hash; };
 function treeRecord(i) {
   const species = T.species[T.sp[i]], info = S.species_info[species];
   const annual = T.seq[1][i] ?? T.point_seq[i] ?? 0;
-  return { i, id: T.id[i], species, info, road: T.roads[T.rd[i]], dong: T.dong?.[i] != null ? T.dongs[T.dong[i]] : null, dbh: T.dbh[i], block: Boolean(T.block[i]),
+  return { i, id: T.id[i], species, info, road: T.roads[T.rd[i]], dong: T.dong?.[i] != null ? T.dongs[T.dong[i]] : null,
+    section: T.sec?.[i] != null ? T.sections[T.sec[i]] : null, grade: T.grades[T.grade[i]], dbh: T.dbh[i], block: Boolean(T.block[i]),
     seq: T.seq.map(a => a[i]), annualKg: annual, lon: T.lon[i], lat: T.lat[i], heightM: T.dbh[i] ? estimateForm(T.dbh[i], info, FORM).h : null };
 }
 const timeAgo = iso => {
@@ -469,29 +471,69 @@ function renderStreet() {
   const strip = el("div", { class: "street", role: "list" }, ...res.map(({ i, d }) => {
     const r = treeRecord(i);
     const size = Math.round(120 + Math.min(1, (r.dbh || 10) / 50) * 120);
-    const item = el("button", { type: "button", class: "tree-slot", role: "listitem", "aria-pressed": "false", onclick: () => pickNear(i, item) },
+    const item = el("button", { type: "button", class: "tree-slot", role: "listitem", "aria-pressed": "false", "data-i": i, onclick: () => pickNear(i, item) },
       svg(treeSVG({ species: r.species, info: r.info, dbh: r.dbh || 10, form: FORM, season, style: "real", seed: hashSeed(r.id), size, label: `${r.species}, ${Math.round(d)}m` })),
       el("span", { class: "slot-label" }, el("b", {}, r.species), el("span", { class: "num" }, `${Math.round(d)}m`), mine.has(r.id) ? el("span", { class: "tag" }, "내 나무") : null));
     return item;
   }));
-  out.replaceChildren(el("div", { class: "street-wrap" }, el("div", { class: "street-sky" }), strip, el("div", { class: "street-ground" })),
-    el("p", { class: "small" }, "가까운 순서로 늘어놓았어요. 나무를 누르면 자세히 보고 친구를 맺을 수 있어요. 모양은 흉고로 추정한 그림입니다."),
+  const mapBox = el("div", { class: "minimap", id: "nearMap", role: "region", "aria-label": "근처 가로수 지도" });
+  out.replaceChildren(mapBox,
+    el("p", { class: "small" }, "주황 점이 기준 위치, 초록 점이 가로수예요. 지도나 아래 그림에서 나무를 누르면 자세히 보고 친구를 맺을 수 있어요."),
+    el("div", { class: "street-wrap" }, el("div", { class: "street-sky" }), strip, el("div", { class: "street-ground" })),
+    el("p", { class: "small" }, "가까운 순서로 늘어놓았어요. 모양은 흉고로 추정한 그림입니다."),
     el("div", { id: "nearCard" }));
+  // 위치 지도: 기준 위치와 근처 나무를 그대로 찍는다
+  state.near.map?.remove();
+  state.near.map = null;
+  const { center } = state.near;
+  createMiniMap(mapBox, { center: [center.lon, center.lat], zoom: 17, token, onSelect: i => pickNear(Number(i)) }).then(mm => {
+    if (!document.body.contains(mapBox)) { mm.remove(); return; }
+    state.near.map = mm;
+    mm.setCenter(center);
+    mm.setTrees(res.map(({ i }) => ({ i, lon: T.lon[i], lat: T.lat[i], label: T.species[T.sp[i]] })));
+    mm.fit([center, ...res.map(({ i }) => ({ lon: T.lon[i], lat: T.lat[i] }))], 36);
+    if (state.near.picked !== null) { const r = treeRecord(state.near.picked); mm.setSelected({ lon: r.lon, lat: r.lat }); }
+  }).catch(err => { mapBox.replaceChildren(el("p", { class: "empty" }, `지도를 불러오지 못했어요 (${err.message})`)); });
 }
-function pickNear(i, item) {
+// 실물 확인용 식별 정보
+function identRows(r, extra = []) {
+  return el("dl", { class: "meta ident" },
+    el("dt", {}, "관리번호"), el("dd", { class: "num" }, `${r.id} (산림청 시군구별 번호)`),
+    el("dt", {}, "도로"), el("dd", {}, r.road),
+    r.section ? el("dt", {}, "구간") : null, r.section ? el("dd", {}, r.section) : null,
+    r.dong ? el("dt", {}, "동") : null, r.dong ? el("dd", {}, r.dong) : null,
+    el("dt", {}, "좌표"), el("dd", { class: "num" }, `${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}`),
+    el("dt", {}, "흉고직경"), el("dd", {}, r.dbh ? `${nf(r.dbh)}cm${r.block ? " (같은 구간 대표값 의심)" : ""}` : "없음"),
+    el("dt", {}, "데이터 품질"), el("dd", {}, `등급 ${r.grade}`),
+    ...extra);
+}
+function mapLinks(r, name) {
+  const label = encodeURIComponent(`${name || r.species} 가로수 ${r.id}`);
+  return el("div", { class: "map-links" },
+    el("a", { href: `https://map.kakao.com/link/map/${label},${r.lat},${r.lon}`, target: "_blank", rel: "noopener" }, "카카오맵에서 보기"),
+    el("a", { href: `https://map.kakao.com/link/to/${label},${r.lat},${r.lon}`, target: "_blank", rel: "noopener" }, "카카오맵 길찾기"),
+    el("a", { href: `https://www.google.com/maps?q=${r.lat},${r.lon}`, target: "_blank", rel: "noopener" }, "구글 지도"),
+    el("a", { href: `map.html#tree-${encodeURIComponent(r.id)}` }, "전체 지도(연구용)"));
+}
+function pickNear(i, item = null) {
+  item = item || document.querySelector(`.tree-slot[data-i="${i}"]`);
   for (const b of document.querySelectorAll(".tree-slot")) b.setAttribute("aria-pressed", "false");
-  item.setAttribute("aria-pressed", "true");
+  item?.setAttribute("aria-pressed", "true");
+  item?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   const r = treeRecord(i);
   const mine = myTree(r.id);
+  state.near.picked = i;
+  state.near.map?.setSelected({ lon: r.lon, lat: r.lat }, true);
+  const dist = state.near.center ? distanceM(state.near.center.lon, state.near.center.lat, r.lon, r.lat) : null;
   const card = $("#nearCard");
   card.replaceChildren(el("div", { class: "card tree-card" },
     el("div", { class: "tree-card-head" }, figure(mine || r, { size: 120, caption: mine ? mine.name : "캐릭터" }),
-      el("div", {}, el("h2", {}, mine ? `${mine.name} (${r.species})` : r.species), el("div", { class: "id" }, `${r.road}${r.dong ? " · " + r.dong : ""} · 관리번호 ${r.id}`),
+      el("div", {}, el("h2", {}, mine ? `${mine.name} (${r.species})` : r.species), el("div", { class: "id" }, `관리번호 ${r.id}${dist !== null ? ` · 기준 위치에서 ${Math.round(dist)}m` : ""}`),
         el("p", { class: "small" }, mine ? "이미 내 나무예요." : "친구가 되면 이 캐릭터가 내 나무가 돼요."))),
-    el("dl", { class: "meta" },
-      el("dt", {}, "흉고직경"), el("dd", {}, r.dbh ? `${nf(r.dbh)}cm${r.block ? " (대표값 의심)" : ""}` : "없음"),
+    identRows(r, [
       el("dt", {}, "모양(추정)"), el("dd", {}, r.dbh ? `높이 약 ${nf(r.heightM)}m` : "-"),
-      el("dt", {}, "한 해 CO₂ 흡수"), el("dd", { class: "num" }, r.seq[1] !== null ? `${kg(r.seq[0])}~${kg(r.seq[2])} kg (추정)` : "계산 안 됨")),
+      el("dt", {}, "한 해 CO₂ 흡수"), el("dd", { class: "num" }, r.seq[1] !== null ? `${kg(r.seq[0])}~${kg(r.seq[2])} kg (추정)` : "계산 안 됨")]),
+    mapLinks(r, mine?.name),
     el("p", { class: "story" }, `저는 ${r.road}에 서 있는 ${josa(r.species, "이에요", "예요")}. ${r.dbh ? `줄기 지름은 ${nf(r.dbh)}cm쯤이에요.` : ""} ${r.block ? "제 흉고는 아직 아무도 직접 재지 않은 대표값이에요." : ""}`),
     el("div", { class: "row" },
       mine ? el("a", { class: "btn", href: `#tree/${encodeURIComponent(r.id)}` }, "내 나무 보기") : el("button", { type: "button", class: "btn", onclick: () => befriend(r) }, "친구 맺기 · 보호자 되기"),
@@ -645,6 +687,10 @@ async function renderTree(id) {
       el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care", "observe") }, "📷 사진 올리기"),
       el("a", { class: "btn ghost", href: `#photo/${encodeURIComponent(id)}` }, "🖼️ 사진·캐릭터·AR"),
       view3dButton(t)),
+    el("section", { class: "card where" }, el("div", { class: "k" }, "이 나무가 서 있는 곳"),
+      el("div", { class: "minimap small", id: "treeMap", role: "region", "aria-label": `${t.name} 위치 지도` }),
+      identRows(t), mapLinks(t, t.name),
+      el("p", { class: "limit" }, "공공데이터의 좌표와 관리번호예요. 현장에서 같은 나무인지 확인하려면 관리번호 표찰(있는 경우)과 도로·구간을 함께 보세요.")),
     coGuardianBlock(t),
     el("div", { class: "kpis tight" },
       kpi("오늘 흡수", ...mass(todayKg), "이 나무, 오늘 하루(추정)"),
@@ -660,6 +706,12 @@ async function renderTree(id) {
     el("h2", {}, `${t.name}의 기록 ${posts.length}건`),
     el("div", { class: "feed" }, ...(posts.length ? posts.map(postCard) : [el("p", { class: "empty" }, "첫 기록을 남겨 보세요.")])),
     el("div", { class: "row end" }, el("button", { type: "button", class: "btn ghost small danger", onclick: () => unfriend(t) }, "친구 끊기"))));
+  const mapBox = $("#treeMap");
+  createMiniMap(mapBox, { center: [t.lon, t.lat], zoom: 18, token }).then(mm => {
+    if (!document.body.contains(mapBox)) { mm.remove(); return; }
+    mm.setTrees([{ i: t.i, lon: t.lon, lat: t.lat, label: t.name }]);
+    mm.setSelected({ lon: t.lon, lat: t.lat });
+  }).catch(err => { mapBox.replaceChildren(el("p", { class: "empty" }, `지도를 불러오지 못했어요 (${err.message})`)); });
 }
 function renameTree(t) {
   const input = el("input", { type: "text", name: "name", maxlength: "12", required: true, value: t.name, "aria-label": "나무 이름" });

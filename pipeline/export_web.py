@@ -27,8 +27,8 @@ def _round_list(series, digits):
     return [None if pd.isna(v) else round(float(v), digits) for v in series]
 
 
-def dong_by_tree(dataset: str) -> dict[str, str]:
-    """원자료의 구간 시점·종점명에서 나무별 동 이름을 찾는다. 원자료가 없으면 빈 dict."""
+def raw_by_tree(dataset: str) -> dict[str, dict]:
+    """원자료의 구간 시점·종점명에서 나무별 동 이름과 '시점 → 종점' 구간 문자열을 찾는다. 원자료가 없으면 빈 dict."""
     raw = RAW_DIR / f"{dataset}.csv"
     if not raw.exists():
         return {}
@@ -37,10 +37,15 @@ def dong_by_tree(dataset: str) -> dict[str, str]:
     for tid, start, end in zip(df["tree_no"].astype(str), df["section_start"].fillna(""), df["section_end"].fillna("")):
         if tid in found:
             continue
-        m = DONG_PATTERN.search(str(start)) or DONG_PATTERN.search(str(end))
-        if m:
-            found[tid] = m.group(1)
+        start, end = str(start).strip(), str(end).strip()
+        m = DONG_PATTERN.search(start) or DONG_PATTERN.search(end)
+        section = " → ".join(x for x in (start, end) if x) or None
+        found[tid] = {"dong": m.group(1) if m else None, "section": section}
     return found
+
+
+def dong_by_tree(dataset: str) -> dict[str, str]:
+    return {k: v["dong"] for k, v in raw_by_tree(dataset).items() if v["dong"]}
 
 
 def places(df: pd.DataFrame) -> list[dict]:
@@ -67,13 +72,18 @@ def export(dataset: str) -> dict:
     sp_idx = {s: i for i, s in enumerate(species)}
     rd_idx = {r: i for i, r in enumerate(roads)}
     issues = df["issues"].fillna("")
-    df["dong"] = df["tree_id"].map(dong_by_tree(dataset))
+    raw = raw_by_tree(dataset)
+    df["dong"] = df["tree_id"].map({k: v["dong"] for k, v in raw.items()})
+    df["section"] = df["tree_id"].map({k: v["section"] for k, v in raw.items()})
     dongs = sorted(df["dong"].dropna().unique())
     dong_idx = {d: i for i, d in enumerate(dongs)}
+    sections = sorted(df["section"].dropna().unique())
+    sec_idx = {x: i for i, x in enumerate(sections)}
     trees = {
-        "species": species, "roads": roads, "dongs": dongs, "grades": GRADES,
+        "species": species, "roads": roads, "dongs": dongs, "sections": sections, "grades": GRADES,
         "id": df["tree_id"].tolist(),
         "dong": [None if pd.isna(d) else dong_idx[d] for d in df["dong"]],
+        "sec": [None if pd.isna(x) else sec_idx[x] for x in df["section"]],
         "lon": _round_list(df["lon"], 6), "lat": _round_list(df["lat"], 6),
         "dbh": _round_list(df["dbh_cm"], 1),
         "sp": df["species_ko"].map(sp_idx).tolist(),
