@@ -55,6 +55,7 @@ async function main() {
   const treesReady = loadJSON("data/trees.json").then(t => { T = t; });
   fetchWeather(JEONJU.lon, JEONJU.lat).then(w => { weather = w; renderWeatherChips(); }).catch(() => { /* 날씨 없이도 동작 */ });
   for (const b of document.querySelectorAll(".tabbar a")) b.addEventListener("click", () => window.scrollTo(0, 0));
+  $("#backBtn").addEventListener("click", goBack);
   await treesReady;
   await importLegacyGuardians();
   await setupCloud();
@@ -180,11 +181,25 @@ function show(name) {
   for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== `s-${name}`;
   document.body.classList.toggle("intro-mode", name === "intro");
   for (const a of document.querySelectorAll(".tabbar a")) a.setAttribute("aria-current", a.dataset.screen === name ? "page" : "false");
+  $("#topbarTitle").textContent = TITLES[name] || "";
   window.scrollTo(0, 0);
+}
+const setTitle = text => { $("#topbarTitle").textContent = text; };
+// 뒤로 가기: 앱 안에서 온 길이 있으면 그 길로, 처음 열었으면 상위 화면으로
+const TITLES = { city: "전주 현황", near: "동네 찾기", sns: "내 나무", tree: "나무", chat: "대화", group: "보호자 방" };
+const PARENT = { city: "#intro", near: "#city", sns: "#city", tree: "#sns", chat: "#tree", group: "#tree" };
+const navStack = [];
+function goBack() {
+  const [name, arg] = (location.hash.slice(1) || "intro").split("/");
+  if (navStack.length > 1) { navStack.pop(); navStack.pop(); history.back(); return; }
+  const parent = PARENT[name] || "#intro";
+  go(parent === "#tree" && arg ? `#tree/${arg}` : parent);
 }
 function route() {
   const [name, arg] = (location.hash.slice(1) || "intro").split("/");
   const id = arg ? decodeURIComponent(arg) : null;
+  const here = location.hash || "#intro";
+  if (navStack[navStack.length - 1] !== here) navStack.push(here);
   if (name === "city") renderCity();
   else if (name === "near") renderNear();
   else if (name === "sns") renderSNS();
@@ -596,8 +611,9 @@ async function renderTree(id) {
   const lastCare = posts.find(p => p.kind === "care");
   const sug = careSuggestions({ weather, season, measured: Boolean(measured), lastCareDays: lastCare ? (Date.now() - new Date(lastCare.t)) / DAY : null, species: t.species });
   const nameBtn = el("button", { type: "button", class: "name-btn", onclick: () => renameTree(t), title: "이름 바꾸기" }, el("h1", {}, t.name), el("span", { class: "edit" }, "✎"));
+  setTitle(t.name);
   box.replaceChildren(el("div", { class: "page-inner" },
-    el("div", { class: "row between" }, el("a", { class: "back", href: "#sns" }, "← 내 나무"), weatherChip()),
+    el("div", { class: "row end" }, weatherChip()),
     el("div", { class: "profile-head" }, avatar(t, { size: 120, mood }),
       el("div", { class: "profile-info" }, nameBtn,
         el("div", { class: "sub" }, `${t.species} · ${t.road}${t.dong ? " · " + t.dong : ""}`),
@@ -750,8 +766,9 @@ async function renderGroup(id) {
     catch (err) { toast(`보내지 못했어요: ${err.message}`, true); }
     finally { input.disabled = false; input.focus(); }
   } }, input, el("button", { type: "submit", class: "btn" }, "보내기"));
+  setTitle(`${t.name} 보호자 방`);
   box.replaceChildren(el("div", { class: "chat" },
-    el("header", { class: "chat-head" }, el("a", { class: "back", href: `#tree/${encodeURIComponent(id)}` }, "←"), avatar(t, { size: 40, mood }),
+    el("header", { class: "chat-head" }, avatar(t, { size: 40, mood }),
       el("div", {}, el("b", {}, `${t.name} 보호자 방`), el("span", { class: "sub" }, ` ${t.species} · ${t.road}`)), el("span", { class: "online" }, `● ${state.profile.nickname}`)),
     el("p", { class: "small", style: "padding:0 16px" }, "같은 나무의 보호자끼리 보는 방이에요. 활동 기록도 여기에 보여요."),
     list, composer));
@@ -815,8 +832,9 @@ async function renderChat(id) {
   };
   const chips = el("div", { class: "chips" }, ...["오늘 어때?", "탄소 얼마나 흡수했어?", "뭐 도와줄까?", "날씨 어때?"].map(q => el("button", { type: "button", class: "chip btn-chip", onclick: () => send(q) }, q)));
   const composer = el("form", { class: "composer", onsubmit: e => { e.preventDefault(); send(input.value); } }, input, el("button", { type: "submit", class: "btn" }, "보내기"));
+  setTitle(`${josa(t.name, "과", "와")} 대화`);
   box.replaceChildren(el("div", { class: "chat" },
-    el("header", { class: "chat-head" }, el("a", { class: "back", href: `#tree/${encodeURIComponent(id)}` }, "←"), avatar(t, { size: 40, mood }),
+    el("header", { class: "chat-head" }, avatar(t, { size: 40, mood }),
       el("div", {}, el("b", {}, t.name), el("span", { class: "sub" }, ` ${t.species} · ${t.road}`)), el("span", { class: "online" }, "● 지금 여기")),
     list, chips, composer));
   requestAnimationFrame(() => { window.scrollTo(0, document.body.scrollHeight); });
