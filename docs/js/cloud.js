@@ -13,6 +13,7 @@ export function configure(c) {
   return Boolean(cfg);
 }
 export const configured = () => Boolean(cfg);
+export const baseUrl = () => cfg?.url || null;
 export const signedIn = () => Boolean(cfg && session?.refresh_token);
 export const userId = () => session?.user_id || null;
 

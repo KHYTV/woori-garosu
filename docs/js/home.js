@@ -94,11 +94,13 @@ async function pushPending() {
   if (!cloudOn()) return;
   await refreshMine();
   for (const t of state.my) await cloud.api.follow({ id: t.id, name: t.name, species: t.species, dong: t.dong, since: t.since });
+  // 어느 서버에 보냈는지 기억해 두어, 서버가 바뀌면 다시 보낸다
   for (const p of state.posts) {
-    if (p.synced) continue;
+    if (p.syncedTo === cloud.baseUrl()) continue;
     const t = myTree(p.treeId);
-    await cloud.api.addActivity({ treeId: p.treeId, activity: p.activity, clientId: String(p.pid), dong: t?.dong, t: p.t });
-    p.synced = true;
+    if (!t) continue;
+    await cloud.api.addActivity({ treeId: p.treeId, activity: p.activity, clientId: String(p.pid), dong: t.dong, t: p.t });
+    p.syncedTo = cloud.baseUrl();
     await db.putPost(p);
   }
 }
@@ -106,7 +108,7 @@ async function syncPost(post, t) {
   if (!cloudOn()) return;
   try {
     await cloud.api.addActivity({ treeId: t.id, activity: post.activity, clientId: String(post.pid), dong: t.dong, t: post.t });
-    post.synced = true;
+    post.syncedTo = cloud.baseUrl();
     await db.putPost(post);
   } catch (err) { console.warn("활동 서버 저장 실패(나중에 다시 보냄)", err); }
 }
