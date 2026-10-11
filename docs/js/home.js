@@ -1,0 +1,636 @@
+// 우리동네가로수 화면 흐름: 인트로 → 전주 현황 → 동네 찾기 → 나무 SNS(프로필·대화·기록)
+import { treeSVG, archetype, seasonForDate, moodFor, hashSeed } from "./characters.js";
+import { dailyUptake, dailyWeight, cumulativeThisYear, uptakeBetween, yearProfile, dayOfYear, seasonWindow } from "./daily.js";
+import { nearestTrees, searchPlaces, geocode, locate, insideJeonju, JEONJU } from "./geo.js";
+import { fetchWeather, weatherLabel, careSuggestions } from "./weather.js";
+import { db, compressImage } from "./db.js";
+import { greeting, proactive, reply, reaction, josa } from "./talk.js";
+import { estimateForm } from "./treeform.js";
+import { circumferenceToDbh } from "./carbon.js";
+
+const $ = sel => document.querySelector(sel);
+const nf = (v, d = 0) => Number(v).toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const kg = v => (Math.abs(v) < 10 ? nf(v, 1) : nf(v, 0));
+// 1kg 미만은 g으로 보여 준다 → [값, 단위]
+const mass = v => (Math.abs(v) < 1 ? [nf(v * 1000), "g"] : [kg(v), "kg"]);
+const massText = v => mass(v).join("");
+const token = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v !== null && v !== undefined) e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k);
+  return e;
+}
+const svg = markup => { const s = el("span", { class: "svgwrap" }); s.innerHTML = markup; return s.firstElementChild; };
+const DAY = 86400000;
+const NICKNAMES = { ginkgo: ["은행이", "노랑이", "부채"], cherry: ["벚꽃이", "분홍이", "봄이"], zelkova: ["느티", "그늘이", "우산"], fringe: ["이팝이", "쌀밥이", "하양이"],
+  maple: ["단풍이", "빨강이", "별잎"], plane: ["버즘이", "얼룩이", "넓적이"], conifer: ["메타", "키다리", "뾰족이"], juniper: ["향이", "초록이"], cedar: ["시다", "늘푸른"],
+  pine: ["솔이", "소나무", "늘솔"], persimmon: ["감이", "주황이", "홍시"], oak: ["도토리", "참이"], willow: ["버들이", "늘어진"], locust: ["아까시", "꿀꽃"],
+  goldenrain: ["모감주", "노랑꽃"], magnolia: ["목련이", "하얀이"], generic: ["나무", "친구", "초록이"] };
+
+let T, S, P, FORM, PLACES, ACT, weather = null;
+const season = seasonForDate();
+const state = { my: [], posts: [], near: { center: null, label: "", results: [], picked: null, radius: 300 } };
+let tickTimer = null;
+
+async function loadJSON(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(`${path} ${r.status}`);
+  return r.json();
+}
+
+async function main() {
+  try {
+    [S, P, FORM, PLACES, ACT] = await Promise.all([loadJSON("data/summary.json"), loadJSON("data/params.json"), loadJSON("data/tree_form.json"),
+      loadJSON("data/places.json"), loadJSON("data/activities.json")]);
+  } catch (e) {
+    toast("데이터를 불러오지 못했습니다. 새로고침해 주세요.", true);
+    throw e;
+  }
+  renderIntro();
+  const treesReady = loadJSON("data/trees.json").then(t => { T = t; });
+  fetchWeather(JEONJU.lon, JEONJU.lat).then(w => { weather = w; renderWeatherChips(); }).catch(() => { /* 날씨 없이도 동작 */ });
+  for (const b of document.querySelectorAll(".tabbar a")) b.addEventListener("click", () => window.scrollTo(0, 0));
+  await treesReady;
+  await importLegacyGuardians();
+  await refreshMine();
+  window.addEventListener("hashchange", route);
+  route();
+}
+
+// ---------- 공통 ----------
+function toast(text, bad = false) {
+  const t = $("#toast");
+  t.textContent = text; t.classList.toggle("bad", bad); t.hidden = false;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.hidden = true; }, 2800);
+}
+function show(name) {
+  for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== `s-${name}`;
+  document.body.classList.toggle("intro-mode", name === "intro");
+  for (const a of document.querySelectorAll(".tabbar a")) a.setAttribute("aria-current", a.dataset.screen === name ? "page" : "false");
+  window.scrollTo(0, 0);
+}
+function route() {
+  const [name, arg] = (location.hash.slice(1) || "intro").split("/");
+  const id = arg ? decodeURIComponent(arg) : null;
+  if (name === "city") renderCity();
+  else if (name === "near") renderNear();
+  else if (name === "sns") renderSNS();
+  else if (name === "tree" && id) renderTree(id);
+  else if (name === "chat" && id) renderChat(id);
+  else { renderIntro(); show("intro"); return; }
+  show(name);
+}
+const go = hash => { location.hash = hash; };
+function treeRecord(i) {
+  const species = T.species[T.sp[i]], info = S.species_info[species];
+  const annual = T.seq[1][i] ?? T.point_seq[i] ?? 0;
+  return { i, id: T.id[i], species, info, road: T.roads[T.rd[i]], dong: T.dong?.[i] != null ? T.dongs[T.dong[i]] : null, dbh: T.dbh[i], block: Boolean(T.block[i]),
+    seq: T.seq.map(a => a[i]), annualKg: annual, lon: T.lon[i], lat: T.lat[i], heightM: T.dbh[i] ? estimateForm(T.dbh[i], info, FORM).h : null };
+}
+const timeAgo = iso => {
+  const d = (Date.now() - new Date(iso)) / 60000;
+  if (d < 1) return "방금"; if (d < 60) return `${Math.floor(d)}분 전`; if (d < 1440) return `${Math.floor(d / 60)}시간 전`;
+  if (d < 1440 * 7) return `${Math.floor(d / 1440)}일 전`;
+  return iso.slice(0, 10);
+};
+const dayKey = date => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+function levelOf(points) {
+  let lv = ACT.levels[0];
+  for (const l of ACT.levels) if (points >= l.min) lv = l;
+  const next = ACT.levels.find(l => l.min > points);
+  return { name: lv.name, next: next ? next.min - points : null };
+}
+function avatar(rec, { size = 56, mood = "happy", style = "character" } = {}) {
+  const a = el("span", { class: "avatar", style: `--size:${size}px` });
+  a.append(svg(treeSVG({ species: rec.species, info: rec.info, dbh: rec.dbh || 15, form: FORM, season, style, mood, seed: hashSeed(rec.id), size: size * 1.5, label: rec.name || rec.species })));
+  return a;
+}
+function weatherChip() {
+  if (!weather) return el("span", { class: "chip weather", "data-weather": "" }, "날씨 불러오는 중");
+  const w = weatherLabel(weather.current.code);
+  return el("span", { class: "chip weather", "data-weather": "" }, `${w.icon} 전주 ${w.text} ${Math.round(weather.current.temp)}℃`);
+}
+function renderWeatherChips() { for (const c of document.querySelectorAll("[data-weather]")) c.replaceWith(weatherChip()); }
+function treeMood(rec, posts) {
+  const lastCare = posts.find(p => p.kind === "care");
+  const lastCareDays = lastCare ? (Date.now() - new Date(lastCare.t)) / DAY : null;
+  return moodFor({ season, weather: weather?.flags, lastCareDays });
+}
+
+// ---------- 내 나무 상태 ----------
+async function refreshMine() {
+  const rows = await db.allTrees();
+  state.my = rows.map(r => { const i = T.id.indexOf(r.id); return i < 0 ? null : { ...treeRecord(i), ...r }; }).filter(Boolean)
+    .sort((a, b) => (a.since < b.since ? 1 : -1));
+  state.posts = await db.allPosts();
+}
+const myTree = id => state.my.find(t => t.id === id);
+const postsOf = id => state.posts.filter(p => p.treeId === id);
+const practiceKg = posts => posts.reduce((a, p) => a + (p.kg || 0), 0);
+// 돌봄 뒤 care_effect_days 동안의 일일 흡수량 합
+function protectedKg(rec, posts) {
+  const days = new Set();
+  const span = ACT.protection?.care_effect_days ?? 7;
+  const today = new Date();
+  for (const p of posts) {
+    if (p.kind !== "care") continue;
+    const d = new Date(p.t);
+    for (let k = 0; k < span; k++) {
+      const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + k);
+      if (x <= today) days.add(dayKey(x));
+    }
+  }
+  let sum = 0;
+  for (const key of days) { const [y, m, d] = key.split("-").map(Number); sum += dailyUptake(rec.annualKg, new Date(y, m - 1, d), P); }
+  return sum;
+}
+async function importLegacyGuardians() {
+  if (await db.getMeta("imported-legacy")) return;
+  try {
+    const ids = JSON.parse(localStorage.getItem("wg-guardian") || "[]");
+    for (const id of ids) {
+      const i = T.id.indexOf(id);
+      if (i < 0 || await db.getTree(id)) continue;
+      const rec = treeRecord(i);
+      await db.putTree({ id, name: NICKNAMES[archetype(rec.species, rec.info)][0], since: new Date().toISOString(), points: 0 });
+    }
+  } catch { /* 옛 기록 없음 */ }
+  await db.setMeta("imported-legacy", true);
+}
+
+// ---------- 1. 인트로 ----------
+function renderIntro() {
+  const box = $("#s-intro");
+  if (box.dataset.ready) return;
+  box.dataset.ready = "1";
+  const top = S.species.slice(0, 9);
+  const maxCount = top[0].count;
+  const skyline = el("div", { class: "skyline sway", "aria-hidden": "true" },
+    ...top.map((s, k) => {
+      const info = S.species_info[s.species];
+      const size = Math.round(64 + 96 * Math.sqrt(s.count / maxCount));
+      const node = svg(treeSVG({ species: s.species, info, dbh: s.median_dbh, form: FORM, season, style: "character", mood: ["happy", "proud", "happy", "sleepy"][k % 4], seed: hashSeed(s.species), size }));
+      node.style.animationDelay = `${(k * 0.7) % 4}s`;
+      return el("figure", { class: "skyline-item", style: `--delay:${(k * 0.7) % 4}s` }, node,
+        el("figcaption", {}, el("b", {}, s.species), el("span", { class: "num" }, `${nf(s.count)}그루`)));
+    }));
+  const total = S.quality.on_map, seq = S.totals.seq_t;
+  box.replaceChildren(
+    el("div", { class: "intro-sky" }),
+    el("div", { class: "intro-inner" },
+      el("p", { class: "eyebrow" }, "전주시 · 시민참여형 가로수 돌봄"),
+      el("h1", { class: "intro-title" }, "우리동네", el("br"), "가로수"),
+      el("p", { class: "intro-lede" }, `전주 가로수 ${nf(total)}그루가 한 해 약 ${nf(seq[1])}톤의 CO₂를 들이마셔요. 우리 동네 나무와 친구가 되어 돌보고, 그 변화를 함께 기록해요.`),
+      skyline,
+      el("div", { class: "ground" }),
+      el("div", { class: "intro-actions" },
+        el("a", { class: "btn big", href: "#city" }, "시작하기"),
+        state.my.length ? el("a", { class: "btn big ghost", href: "#sns" }, `내 나무 ${state.my.length}그루 보기`) : el("a", { class: "btn big ghost", href: "#near" }, "우리동네 나무 찾기")),
+      el("p", { class: "intro-foot" }, "탄소 수치는 공공데이터로 추정한 값(검증 전)입니다 · ", el("a", { href: "map.html" }, "지도 보기"), " · ", el("a", { href: "report/jeonju.html" }, "데이터 보고서"))));
+}
+
+// ---------- 2. 전주 현황 ----------
+function renderCity() {
+  const box = $("#s-city");
+  clearInterval(tickTimer);
+  const annualKg = S.totals.seq_t[1] * 1000, lo = S.totals.seq_t[0], hi = S.totals.seq_t[2];
+  const today = new Date();
+  const todayKg = dailyUptake(annualKg, today, P);
+  const yearKg = cumulativeThisYear(annualKg, today, P);
+  const win = seasonWindow(P), doy = dayOfYear(today);
+  const inSeason = doy >= win.start && doy <= win.end;
+  const fmt = v => (v >= 1000 ? `${nf(v / 1000, 2)} t` : `${nf(v, 0)} kg`);
+  const live = el("div", { class: "hero-num num" }, fmt(todayKg));
+  const liveSub = el("div", { class: "hero-sub" });
+  const tick = () => {
+    const now = new Date();
+    const frac = Math.min(1, Math.max(0, (now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600 - 6) / 13)); // 06–19시 낮 동안 고르게
+    liveSub.textContent = inSeason ? `오늘 하루 예상치 · 지금까지 약 ${fmt(todayKg * frac)} (낮 06–19시에 고르게 흡수한다고 가정)` : "겨울에는 잎이 없어 흡수량을 0으로 봅니다";
+  };
+  tick();
+  tickTimer = setInterval(tick, 1000);
+  // 한 해 그래프
+  const prof = yearProfile(annualKg, today.getFullYear(), P);
+  const W = 600, H = 120, max = Math.max(...prof);
+  const path = prof.map((v, k) => `${k === 0 ? "M" : "L"}${(k / 364 * W).toFixed(1)} ${(H - 8 - v / max * (H - 24)).toFixed(1)}`).join(" ");
+  const x = (doy - 1) / 364 * W;
+  const months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const spark = svg(`<svg viewBox="0 0 ${W} ${H + 18}" class="spark" role="img" aria-label="한 해 동안의 일일 흡수량 곡선과 오늘 위치">
+    <rect x="${((win.start - 1) / 364 * W).toFixed(1)}" y="8" width="${(win.length / 364 * W).toFixed(1)}" height="${H - 16}" fill="var(--accent-soft)" rx="6"/>
+    <path d="${path} L${W} ${H - 8} L0 ${H - 8} Z" fill="var(--accent)" opacity="0.18"/>
+    <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    <line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="4" y2="${H - 8}" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="${x.toFixed(1)}" y="${H + 12}" font-size="11" text-anchor="middle" fill="var(--ink)">오늘</text>
+    ${months.map(m => `<text x="${((new Date(today.getFullYear(), m - 1, 15) - new Date(today.getFullYear(), 0, 1)) / DAY / 364 * W).toFixed(1)}" y="${H + 12}" font-size="10" text-anchor="middle" fill="var(--muted)">${m === Math.round(doy / 30.4 + 0.5) ? "" : m + "월"}</text>`).join("")}
+  </svg>`);
+  const speciesRow = el("div", { class: "species-row" }, ...S.species.slice(0, 12).map(s => {
+    const info = S.species_info[s.species];
+    const dayKg = dailyUptake(s.total_seq_t[1] * 1000, today, P);
+    return el("div", { class: "sp-card" }, svg(treeSVG({ species: s.species, info, dbh: s.median_dbh, form: FORM, season, style: "character", seed: hashSeed(s.species), size: 84 })),
+      el("b", {}, s.species), el("span", { class: "num" }, `${nf(s.count)}그루`), el("span", { class: "sub num" }, `오늘 ${dayKg >= 1000 ? nf(dayKg / 1000, 2) + "t" : nf(dayKg) + "kg"}`));
+  }));
+  box.replaceChildren(el("div", { class: "page-inner" },
+    el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "2단계 · 전주 가로수 지금"), el("h1", {}, "오늘 전주 가로수가 들이마시는 CO₂")), weatherChip()),
+    el("div", { class: "hero" }, live, liveSub),
+    el("div", { class: "kpis tight" },
+      kpi("가로수", nf(S.quality.on_map), "그루", "산림청 2025-08-26판, 전주 경계 안"),
+      kpi("올해 누적 흡수", nf(yearKg / 1000, 0), "t", `1월 1일부터 오늘까지(추정)`),
+      kpi("한 해 흡수", nf(S.totals.seq_t[1]), "t/년", `80% 범위 ${nf(lo)}–${nf(hi)} t`),
+      kpi("CO₂ 저장량", nf(S.totals.storage_t[1]), "t", "줄기·가지·뿌리에 쌓인 양")),
+    el("section", { class: "card" }, el("div", { class: "k" }, "하루 흡수량은 계절을 따라 변해요"), spark,
+      el("p", { class: "limit" }, `연간 흡수량을 서리 없는 ${win.length}일(4월 ${win.start - 90}일쯤부터 10월 말)에 나눠 배분한 가정값입니다. 한여름에 가장 많고 겨울에는 0입니다.`)),
+    el("h2", {}, "수종별 캐릭터"), el("p", { class: "small" }, "전주 가로수의 수종을 캐릭터로 요약했어요. 크기는 수종의 흉고 중앙값을 따릅니다."),
+    speciesRow,
+    el("div", { class: "cta" }, el("a", { class: "btn big", href: "#near" }, "우리동네 가로수와 친구 맺기 →")),
+    el("p", { class: "notice" }, el("b", {}, "계수 검증 전 · 방법 시연용 "), "탄소 수치는 일부 가정값으로 계산한 추정 범위입니다. ", el("a", { href: "report/jeonju.html" }, "데이터 보고서"))));
+}
+function kpi(label, value, unit, sub) {
+  return el("div", { class: "kpi" }, el("div", { class: "label" }, label), el("div", { class: "value num" }, value, unit ? el("small", {}, unit) : null), el("div", { class: "sub" }, sub));
+}
+
+// ---------- 3. 동네 찾기 ----------
+function renderNear() {
+  const box = $("#s-near");
+  if (!box.dataset.ready) {
+    box.dataset.ready = "1";
+    const input = el("input", { id: "addr", type: "search", list: "placeList", placeholder: "동·도로·주소 (예: 효자동 백제대로, 명륜1길 10)", autocomplete: "off", "aria-label": "동네 주소" });
+    const list = el("datalist", { id: "placeList" });
+    input.addEventListener("input", () => {
+      list.replaceChildren(...searchPlaces(PLACES, input.value).map(p => el("option", { value: p.name }, `${p.kind === "dong" ? "동" : "도로"} · ${nf(p.count)}그루`)));
+    });
+    const form = el("form", { class: "addr-form", onsubmit: async e => { e.preventDefault(); await findByText(input.value); } },
+      el("label", { class: "field grow" }, input), list,
+      el("button", { type: "submit", class: "btn" }, "찾기"),
+      el("button", { type: "button", class: "btn ghost", onclick: findByGPS }, "내 위치"));
+    const radius = el("div", { class: "seg", role: "group", "aria-label": "반경" }, ...[200, 300, 500].map(r => el("button", { type: "button", "aria-pressed": String(r === state.near.radius), onclick: () => { state.near.radius = r; for (const b of radius.children) b.setAttribute("aria-pressed", String(Number(b.dataset.r) === r)); if (state.near.center) runNear(); }, "data-r": r }, `${r}m`)));
+    box.replaceChildren(el("div", { class: "page-inner" },
+      el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "3단계 · 우리동네 가로수"), el("h1", {}, "내가 사는 곳 근처의 나무")), weatherChip()),
+      el("p", { class: "small" }, "동 이름, 도로 이름, 번지까지 넣을 수 있어요. 번지·건물은 OpenStreetMap에서 찾습니다."),
+      form, el("div", { class: "row between" }, el("div", { id: "nearLabel", class: "small" }), radius),
+      el("div", { id: "nearResults" })));
+    const q = new URLSearchParams(location.hash.split("?")[1] || "").get("q");
+    if (q) { input.value = q; findByText(q); }
+    else if (state.my.length) {
+      // 내 나무가 있으면 그 주변부터 보여 준다
+      const t = state.my[0];
+      state.near.center = { lon: t.lon, lat: t.lat }; state.near.label = `${t.name} 주변`;
+      runNear();
+    }
+  }
+}
+async function findByText(q) {
+  q = (q || "").trim();
+  if (!q) return;
+  const local = searchPlaces(PLACES, q, 1)[0];
+  const words = q.split(/\s+/).filter(Boolean);
+  // 동·도로 이름만이면 색인으로, 숫자(번지)나 모르는 말이 섞이면 지오코딩
+  const exact = local && words.every(w => local.name.includes(w));
+  if (exact) {
+    state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name}(${local.kind === "dong" ? "동 중심" : "도로 중심"}) 주변`;
+    return runNear();
+  }
+  $("#nearLabel").textContent = "주소를 찾는 중…";
+  const hits = await geocode(q);
+  const hit = hits.find(h => insideJeonju(h.lon, h.lat));
+  if (hit) {
+    state.near.center = { lon: hit.lon, lat: hit.lat }; state.near.label = `${hit.name} 주변`;
+    return runNear();
+  }
+  if (local) {
+    state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name} 주변 (주소는 못 찾아 가까운 ${local.kind === "dong" ? "동" : "도로"}으로)`;
+    return runNear();
+  }
+  $("#nearLabel").textContent = "";
+  toast("찾지 못했어요. 동 이름이나 도로 이름으로 다시 넣어 보세요.", true);
+}
+async function findByGPS() {
+  try {
+    const pos = await locate();
+    if (!insideJeonju(pos.lon, pos.lat)) { toast("지금 위치가 전주 밖이에요. 주소로 찾아 주세요.", true); return; }
+    state.near.center = pos; state.near.label = `내 위치 주변(오차 ±${Math.round(pos.acc)}m)`;
+    runNear();
+  } catch (e) { toast(e.message, true); }
+}
+function runNear() {
+  const { center, radius } = state.near;
+  state.near.results = nearestTrees(T, center.lon, center.lat, { radius, limit: 40 });
+  state.near.picked = null;
+  $("#nearLabel").textContent = `${state.near.label} · 반경 ${radius}m 안 ${nf(state.near.results.length)}그루${state.near.results.length === 40 ? "(가까운 40그루만)" : ""}`;
+  renderStreet();
+}
+function renderStreet() {
+  const out = $("#nearResults");
+  const res = state.near.results;
+  if (!res.length) { out.replaceChildren(el("p", { class: "empty" }, "이 반경 안에는 등록된 가로수가 없어요. 반경을 넓히거나 다른 곳을 찾아 보세요.")); return; }
+  const mine = new Set(state.my.map(t => t.id));
+  const strip = el("div", { class: "street", role: "list" }, ...res.map(({ i, d }) => {
+    const r = treeRecord(i);
+    const size = Math.round(120 + Math.min(1, (r.dbh || 10) / 50) * 120);
+    const item = el("button", { type: "button", class: "tree-slot", role: "listitem", "aria-pressed": "false", onclick: () => pickNear(i, item) },
+      svg(treeSVG({ species: r.species, info: r.info, dbh: r.dbh || 10, form: FORM, season, style: "real", seed: hashSeed(r.id), size, label: `${r.species}, ${Math.round(d)}m` })),
+      el("span", { class: "slot-label" }, el("b", {}, r.species), el("span", { class: "num" }, `${Math.round(d)}m`), mine.has(r.id) ? el("span", { class: "tag" }, "내 나무") : null));
+    return item;
+  }));
+  out.replaceChildren(el("div", { class: "street-wrap" }, el("div", { class: "street-sky" }), strip, el("div", { class: "street-ground" })),
+    el("p", { class: "small" }, "가까운 순서로 늘어놓았어요. 나무를 누르면 자세히 보고 친구를 맺을 수 있어요. 모양은 흉고로 추정한 그림입니다."),
+    el("div", { id: "nearCard" }));
+}
+function pickNear(i, item) {
+  for (const b of document.querySelectorAll(".tree-slot")) b.setAttribute("aria-pressed", "false");
+  item.setAttribute("aria-pressed", "true");
+  const r = treeRecord(i);
+  const mine = myTree(r.id);
+  const card = $("#nearCard");
+  card.replaceChildren(el("div", { class: "card tree-card" },
+    el("div", { class: "tree-card-head" }, avatar(r, { size: 72, style: "character" }),
+      el("div", {}, el("h2", {}, mine ? `${mine.name} (${r.species})` : r.species), el("div", { class: "id" }, `${r.road}${r.dong ? " · " + r.dong : ""} · 관리번호 ${r.id}`))),
+    el("dl", { class: "meta" },
+      el("dt", {}, "흉고직경"), el("dd", {}, r.dbh ? `${nf(r.dbh)}cm${r.block ? " (대표값 의심)" : ""}` : "없음"),
+      el("dt", {}, "모양(추정)"), el("dd", {}, r.dbh ? `높이 약 ${nf(r.heightM)}m` : "-"),
+      el("dt", {}, "한 해 CO₂ 흡수"), el("dd", { class: "num" }, r.seq[1] !== null ? `${kg(r.seq[0])}~${kg(r.seq[2])} kg (추정)` : "계산 안 됨")),
+    el("p", { class: "story" }, `저는 ${r.road}에 서 있는 ${josa(r.species, "이에요", "예요")}. ${r.dbh ? `줄기 지름은 ${nf(r.dbh)}cm쯤이에요.` : ""} ${r.block ? "제 흉고는 아직 아무도 직접 재지 않은 대표값이에요." : ""}`),
+    el("div", { class: "row" },
+      mine ? el("a", { class: "btn", href: `#tree/${encodeURIComponent(r.id)}` }, "내 나무 보기") : el("button", { type: "button", class: "btn", onclick: () => befriend(r) }, "친구 맺기 · 보호자 되기"),
+      view3dButton(r))));
+  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+function view3dButton(r) {
+  const btn = el("button", { type: "button", class: "btn ghost" }, "3D · AR");
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      const { openTreeViewer } = await import("./tree3d.js");
+      const { jenkins_group, alt_group, growth_class, mature_height_class } = r.info;
+      openTreeViewer({ tree: { id: r.id, species: r.species, info: r.info, model: { jenkins_group, alt_group, growth_class, mature_height_class, dbh: r.dbh, block: r.block } }, P, form: FORM, token });
+    } catch (e) { console.error(e); toast("3D를 열지 못했어요. 네트워크를 확인해 주세요.", true); }
+    finally { btn.disabled = false; }
+  });
+  return btn;
+}
+
+// ---------- 친구 맺기 ----------
+function dialog(title, body, { confirm = "확인", cancel = "취소", onConfirm }) {
+  const d = el("dialog", { class: "sheet-dialog" });
+  const form = el("form", { method: "dialog", class: "dialog-form" }, el("h2", {}, title), body,
+    el("div", { class: "row end" }, cancel ? el("button", { type: "button", class: "btn ghost", onclick: () => d.close() }, cancel) : null, el("button", { type: "submit", class: "btn" }, confirm)));
+  form.addEventListener("submit", async e => { e.preventDefault(); const ok = await onConfirm(form); if (ok !== false) d.close(); });
+  d.append(form);
+  d.addEventListener("close", () => d.remove());
+  document.body.append(d);
+  d.showModal();
+  return d;
+}
+function befriend(r) {
+  const names = NICKNAMES[archetype(r.species, r.info)] || NICKNAMES.generic;
+  const input = el("input", { type: "text", name: "name", maxlength: "12", required: true, value: names[Math.floor(Math.random() * names.length)], "aria-label": "나무 이름" });
+  dialog("나무 이름 짓기", el("div", { class: "dialog-body" },
+    el("p", {}, `${r.road}의 ${josa(r.species, "과", "와")} 친구가 돼요. 이름을 지어 주세요.`),
+    el("div", { class: "row" }, input, ...names.map(n => el("button", { type: "button", class: "chip btn-chip", onclick: () => { input.value = n; } }, n))),
+    el("p", { class: "hint" }, "보호자 기록은 이 기기의 브라우저에만 저장돼요(온라인 저장은 준비 중).")), {
+    confirm: "친구 맺기",
+    onConfirm: async form => {
+      const name = form.name.value.trim();
+      if (!name) return false;
+      const rec = { id: r.id, name, since: new Date().toISOString(), points: 0 };
+      await db.putTree(rec);
+      await refreshMine();
+      const t = myTree(r.id);
+      const ctx = chatContext(t);
+      await db.addMessage({ treeId: r.id, t: new Date().toISOString(), from: "tree", text: greeting(ctx) });
+      const p = proactive(ctx);
+      if (p) await db.addMessage({ treeId: r.id, t: new Date(Date.now() + 1000).toISOString(), from: "tree", text: p.text, activity: p.activity });
+      toast(`${josa(name, "과", "와")} 친구가 되었어요`);
+      go(`#tree/${encodeURIComponent(r.id)}`);
+    },
+  });
+  setTimeout(() => input.select(), 50);
+}
+
+// ---------- 4. SNS 홈 ----------
+async function renderSNS() {
+  await refreshMine();
+  const box = $("#s-sns");
+  if (!state.my.length) {
+    const sample = S.species[0];
+    box.replaceChildren(el("div", { class: "page-inner" },
+      el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "4단계 · 나무 SNS"), el("h1", {}, "내 나무")), weatherChip()),
+      el("div", { class: "empty-state" }, svg(treeSVG({ species: sample.species, info: S.species_info[sample.species], dbh: sample.median_dbh, form: FORM, season, mood: "sad", size: 150 })),
+        el("p", {}, "아직 친구가 된 나무가 없어요. 우리 동네 가로수를 찾아 첫 친구를 맺어 보세요."),
+        el("a", { class: "btn big", href: "#near" }, "우리동네 나무 찾기"))));
+    return;
+  }
+  const today = new Date();
+  const totals = state.my.reduce((acc, t) => {
+    const posts = postsOf(t.id);
+    acc.year += uptakeBetween(t.annualKg, new Date(t.since), today, P);
+    acc.practice += practiceKg(posts);
+    acc.protected += protectedKg(t, posts);
+    acc.points += t.points || 0;
+    return acc;
+  }, { year: 0, practice: 0, protected: 0, points: 0 });
+  const lv = levelOf(totals.points);
+  const stories = el("div", { class: "stories" }, ...state.my.map(t => el("a", { class: "story", href: `#tree/${encodeURIComponent(t.id)}` }, avatar(t, { size: 60, mood: treeMood(t, postsOf(t.id)) }), el("span", {}, t.name))),
+    el("a", { class: "story add", href: "#near" }, el("span", { class: "avatar plus", style: "--size:60px" }, "+"), el("span", {}, "친구 추가")));
+  const feed = el("div", { class: "feed" }, ...(state.posts.length ? state.posts.map(postCard) : [el("p", { class: "empty" }, "아직 기록이 없어요. 나무를 눌러 돌봄이나 생활 실천을 기록해 보세요.")]));
+  box.replaceChildren(el("div", { class: "page-inner" },
+    el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "4단계 · 나무 SNS"), el("h1", {}, "내 나무")), weatherChip()),
+    stories,
+    el("div", { class: "kpis tight" },
+      kpi("함께한 뒤 나무가 흡수", ...mass(totals.year), "친구 맺은 날부터(추정)"),
+      kpi("돌보는 동안 흡수", ...mass(totals.protected), `돌봄 뒤 ${ACT.protection.care_effect_days}일 기준`),
+      kpi("내 생활 실천 감축", ...mass(totals.practice), "실천 기록 환산(추정)"),
+      kpi("기여 점수", nf(totals.points), "점", lv.next ? `${lv.name} · 다음까지 ${lv.next}점` : lv.name)),
+    el("h2", {}, "기록"), feed));
+}
+function postCard(p) {
+  const t = myTree(p.treeId);
+  if (!t) return null;
+  const card = el("article", { class: "post" },
+    el("header", {}, avatar(t, { size: 36 }), el("div", {}, el("a", { href: `#tree/${encodeURIComponent(t.id)}` }, el("b", {}, t.name)), el("span", { class: "sub" }, ` · ${t.species} · ${timeAgo(p.t)}`))),
+    p.photo ? el("img", { class: "post-photo", src: URL.createObjectURL(p.photo), alt: p.label || "사진" }) : null,
+    el("p", {}, el("span", { class: "act-icon" }, p.icon || ""), " ", el("b", {}, p.label), p.circ ? ` · 둘레 ${nf(p.circ)}cm` : "", p.text ? ` — ${p.text}` : ""),
+    el("div", { class: "badges" }, p.points ? el("span", { class: "badge" }, `+${p.points}점`) : null,
+      p.kg ? el("span", { class: "badge green" }, `−${massText(p.kg)} CO₂ (추정)`) : null,
+      p.kind === "care" ? el("span", { class: "badge soft" }, "돌봄") : p.kind === "practice" ? el("span", { class: "badge soft" }, "생활 실천") : null));
+  return card;
+}
+
+// ---------- 나무 프로필 ----------
+async function renderTree(id) {
+  await refreshMine();
+  const t = myTree(id);
+  const box = $("#s-tree");
+  if (!t) {
+    const i = T.id.indexOf(id);
+    if (i < 0) { box.replaceChildren(el("div", { class: "page-inner" }, el("p", { class: "empty" }, "나무를 찾을 수 없어요."))); return; }
+    const r = treeRecord(i);
+    box.replaceChildren(el("div", { class: "page-inner" }, el("div", { class: "card tree-card" }, el("div", { class: "tree-card-head" }, avatar(r, { size: 72 }), el("div", {}, el("h2", {}, r.species), el("div", { class: "id" }, r.road))),
+      el("div", { class: "row" }, el("button", { type: "button", class: "btn", onclick: () => befriend(r) }, "친구 맺기 · 보호자 되기"), el("a", { class: "btn ghost", href: "#near" }, "동네 찾기")))));
+    return;
+  }
+  const posts = postsOf(id);
+  const today = new Date();
+  const todayKg = dailyUptake(t.annualKg, today, P), yearKg = uptakeBetween(t.annualKg, new Date(t.since), today, P);
+  const prot = protectedKg(t, posts), prac = practiceKg(posts);
+  const lv = levelOf(t.points || 0);
+  const days = Math.max(1, Math.floor((today - new Date(t.since)) / DAY) + 1);
+  const mood = treeMood(t, posts);
+  const measured = posts.find(p => p.circ);
+  const lastCare = posts.find(p => p.kind === "care");
+  const sug = careSuggestions({ weather, season, measured: Boolean(measured), lastCareDays: lastCare ? (Date.now() - new Date(lastCare.t)) / DAY : null, species: t.species });
+  const nameBtn = el("button", { type: "button", class: "name-btn", onclick: () => renameTree(t), title: "이름 바꾸기" }, el("h1", {}, t.name), el("span", { class: "edit" }, "✎"));
+  box.replaceChildren(el("div", { class: "page-inner" },
+    el("div", { class: "row between" }, el("a", { class: "back", href: "#sns" }, "← 내 나무"), weatherChip()),
+    el("div", { class: "profile-head" }, avatar(t, { size: 120, mood }),
+      el("div", { class: "profile-info" }, nameBtn,
+        el("div", { class: "sub" }, `${t.species} · ${t.road}${t.dong ? " · " + t.dong : ""}`),
+        el("div", { class: "sub" }, `친구 ${days}일째 · ${lv.name} · ${nf(t.points || 0)}점`),
+        el("div", { class: "mood" }, { happy: "기분 좋아요", thirsty: "목이 말라요", hot: "더워요", cold: "추워요", sleepy: "겨울잠 중", proud: "뿌듯해요", sad: "오랜만이에요" }[mood]))),
+    el("div", { class: "actions" },
+      el("a", { class: "btn", href: `#chat/${encodeURIComponent(id)}` }, "💬 메시지"),
+      el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care") }, "🌳 돌봄 기록"),
+      el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "practice") }, "🌱 생활 실천"),
+      el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care", "observe") }, "📷 사진 올리기"),
+      view3dButton(t)),
+    el("div", { class: "kpis tight" },
+      kpi("오늘 흡수", ...mass(todayKg), "이 나무, 오늘 하루(추정)"),
+      kpi("함께한 뒤 흡수", ...mass(yearKg), `${new Date(t.since).toLocaleDateString("ko-KR")}부터`),
+      kpi("돌보는 동안 흡수", ...mass(prot), `돌봄 뒤 ${ACT.protection.care_effect_days}일 기준`),
+      kpi("내 실천 감축", ...mass(prac), "이 나무와 함께 기록한 실천")),
+    sug.length ? el("section", { class: "card suggest" }, el("div", { class: "k" }, `${t.name}의 오늘 부탁`),
+      ...sug.map(s => el("div", { class: "sug" }, el("p", {}, s.text, el("span", { class: "why" }, ` (${s.why})`)),
+        el("button", { type: "button", class: "btn small", onclick: () => openActivity(t, "care", s.activity) }, "지금 기록")))) : null,
+    el("section", { class: "card" }, el("div", { class: "k" }, "한 해 CO₂ 흡수(추정)"),
+      el("div", { class: "big num" }, t.seq[1] !== null ? `${kg(t.seq[0])}~${kg(t.seq[2])}` : "-", el("small", {}, "kg/년")),
+      el("p", { class: "limit" }, `도시 생육 보정은 해외 기준을 썼고 국내 도시수목 상대생장식이 없어 대리식을 적용했습니다.${t.block ? " 이 구간의 흉고는 대표값으로 보여 범위를 넓게 잡았습니다." : ""}${measured ? ` 내가 잰 둘레 ${nf(measured.circ)}cm(흉고 ${nf(circumferenceToDbh(measured.circ), 1)}cm)가 기록되어 있어요.` : ""}`)),
+    el("h2", {}, `${t.name}의 기록 ${posts.length}건`),
+    el("div", { class: "feed" }, ...(posts.length ? posts.map(postCard) : [el("p", { class: "empty" }, "첫 기록을 남겨 보세요.")])),
+    el("div", { class: "row end" }, el("button", { type: "button", class: "btn ghost small danger", onclick: () => unfriend(t) }, "친구 끊기"))));
+}
+function renameTree(t) {
+  const input = el("input", { type: "text", name: "name", maxlength: "12", required: true, value: t.name, "aria-label": "나무 이름" });
+  dialog("이름 바꾸기", el("div", { class: "dialog-body" }, input), { confirm: "저장", onConfirm: async form => {
+    const name = form.name.value.trim();
+    if (!name) return false;
+    await db.putTree({ id: t.id, name, since: t.since, points: t.points || 0 });
+    await renderTree(t.id);
+  } });
+  setTimeout(() => input.select(), 50);
+}
+function unfriend(t) {
+  dialog("친구를 끊을까요?", el("p", { class: "dialog-body" }, `${josa(t.name, "과", "와")}의 기록(사진·대화 포함)이 이 기기에서 지워져요.`), { confirm: "끊기", onConfirm: async () => {
+    await db.deleteTree(t.id);
+    await refreshMine();
+    toast(`${josa(t.name, "과", "와")} 헤어졌어요`);
+    go("#sns");
+  } });
+}
+
+// ---------- 활동 기록 ----------
+function openActivity(t, kind, presetId = null) {
+  const items = kind === "care" ? ACT.care : ACT.practice;
+  let picked = presetId ? items.find(a => a.id === presetId) : null;
+  const list = el("div", { class: "act-list" }, ...items.map(a => el("button", { type: "button", class: "act", "aria-pressed": String(picked?.id === a.id), onclick: () => { picked = a; for (const b of list.children) b.setAttribute("aria-pressed", String(b === btn)); renderForm(); }, "data-id": a.id },
+    el("span", { class: "act-icon" }, a.icon), el("span", { class: "act-label" }, a.label), el("span", { class: "act-sub" }, `+${a.points}점${a.kg ? ` · −${massText(a.kg)}/${a.per}` : a.kg === null ? " · 점수만" : ""}`))));
+  const btn = null;
+  const formBox = el("div", { class: "act-form" });
+  const renderForm = () => {
+    for (const b of list.children) b.setAttribute("aria-pressed", String(b.dataset.id === picked?.id));
+    if (!picked) { formBox.replaceChildren(); return; }
+    formBox.replaceChildren(...[
+      picked.hint ? el("p", { class: "hint" }, picked.hint) : null,
+      picked.basis ? el("p", { class: "hint" }, `환산 근거: ${picked.basis}`) : null,
+      picked.needs === "circ" ? el("div", { class: "row" }, el("input", { type: "number", name: "circ", min: "5", max: "700", step: "0.5", inputmode: "decimal", required: true, placeholder: "둘레 cm", "aria-label": "흉고둘레(cm)" }), el("span", {}, "cm (땅에서 1.2m 높이)")) : null,
+      el("label", { class: "file" }, el("span", {}, picked.needs === "photo" ? "사진 (필수)" : "사진 (선택)"), el("input", { type: "file", name: "photo", accept: "image/*", capture: "environment", required: picked.needs === "photo" })),
+      el("textarea", { name: "text", maxlength: "200", placeholder: "한마디 (선택)" })].filter(Boolean));
+  };
+  renderForm();
+  dialog(kind === "care" ? `${t.name} 돌봄 기록` : "생활 실천 기록", el("div", { class: "dialog-body" }, list, formBox), { confirm: "기록하기", onConfirm: async form => {
+    if (!picked) { toast("활동을 골라 주세요.", true); return false; }
+    const todayCount = postsOf(t.id).filter(p => p.activity === picked.id && dayKey(new Date(p.t)) === dayKey(new Date())).length;
+    if (todayCount >= ACT.daily_limit_per_tree) { toast(`오늘은 '${picked.label}'을(를) 이미 ${todayCount}번 기록했어요.`, true); return false; }
+    const file = form.photo?.files?.[0];
+    let photo = null;
+    if (file) { try { photo = await compressImage(file); } catch (e) { toast(e.message, true); return false; } }
+    const circ = form.circ ? Number(form.circ.value) || null : null;
+    const post = { treeId: t.id, t: new Date().toISOString(), kind, activity: picked.id, label: picked.label, icon: picked.icon, points: picked.points, kg: picked.kg || 0, text: (form.text.value || "").trim(), photo, circ };
+    await db.addPost(post);
+    const points = (t.points || 0) + picked.points;
+    await db.putTree({ id: t.id, name: t.name, since: t.since, points });
+    await refreshMine();
+    const fresh = myTree(t.id), posts = postsOf(t.id);
+    const ctx = { ...chatContext(fresh), protectedKg: protectedKg(fresh, posts), practiceKg: practiceKg(posts), points, gainedPoints: picked.points, gainedKg: picked.kg || 0 };
+    await db.addMessage({ treeId: t.id, t: new Date().toISOString(), from: "tree", text: reaction({ ...picked, kind }, ctx) });
+    toast(`기록했어요 · +${picked.points}점${picked.kg ? ` · −${massText(picked.kg)}` : ""}`);
+    if (location.hash.startsWith("#chat/")) renderChat(t.id); else renderTree(t.id);
+  } });
+}
+
+// ---------- 대화 ----------
+function chatContext(t) {
+  const posts = postsOf(t.id);
+  const today = new Date();
+  const lastCare = posts.find(p => p.kind === "care");
+  return { tree: t, weather, season, todayKg: dailyUptake(t.annualKg, today, P), yearKg: cumulativeThisYear(t.annualKg, today, P),
+    practiceKg: practiceKg(posts), points: t.points || 0, measured: posts.some(p => p.circ), lastCareDays: lastCare ? (Date.now() - new Date(lastCare.t)) / DAY : null, guardianName: null };
+}
+async function renderChat(id) {
+  await refreshMine();
+  const t = myTree(id);
+  const box = $("#s-chat");
+  if (!t) { go(`#tree/${encodeURIComponent(id)}`); return; }
+  let msgs = await db.messagesFor(id);
+  // 하루 넘게 조용했고 오늘 날씨 제안이 있으면 나무가 먼저 말을 건다
+  const last = msgs[msgs.length - 1];
+  if (weather && (!last || Date.now() - new Date(last.t) > DAY)) {
+    const p = proactive(chatContext(t));
+    if (p && !(last && last.text === p.text)) { await db.addMessage({ treeId: id, t: new Date().toISOString(), from: "tree", text: p.text, activity: p.activity }); msgs = await db.messagesFor(id); }
+  }
+  const mood = treeMood(t, postsOf(id));
+  const list = el("div", { class: "msgs", role: "log", "aria-live": "polite" });
+  const bubble = m => {
+    const b = el("div", { class: `bubble ${m.from}` }, m.from === "tree" ? avatar(t, { size: 30, mood }) : null,
+      el("div", { class: "bubble-body" }, el("p", {}, m.text), m.activity ? el("button", { type: "button", class: "btn small", onclick: () => openActivity(t, "care", m.activity) }, "기록하기") : null,
+        el("time", { datetime: m.t }, new Date(m.t).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }))));
+    return b;
+  };
+  let lastDay = "";
+  for (const m of msgs) {
+    const d = m.t.slice(0, 10);
+    if (d !== lastDay) { list.append(el("div", { class: "day" }, new Date(m.t).toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" }))); lastDay = d; }
+    list.append(bubble(m));
+  }
+  const input = el("input", { type: "text", name: "text", maxlength: "200", placeholder: `${t.name}에게 메시지…`, autocomplete: "off", "aria-label": "메시지" });
+  const send = async text => {
+    text = text.trim();
+    if (!text) return;
+    const mine = { treeId: id, t: new Date().toISOString(), from: "me", text };
+    await db.addMessage(mine);
+    list.append(bubble(mine));
+    input.value = "";
+    list.scrollTop = list.scrollHeight; window.scrollTo(0, document.body.scrollHeight);
+    const typing = el("div", { class: "bubble tree typing" }, avatar(t, { size: 30, mood }), el("div", { class: "bubble-body" }, el("span", { class: "dots" }, "···")));
+    list.append(typing);
+    await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
+    const answer = { treeId: id, t: new Date().toISOString(), from: "tree", text: reply(text, chatContext(t)) };
+    const p = /뭐 해|뭐해|할 일|도와|해줄/.test(text) ? proactive(chatContext(t)) : null;
+    if (p) answer.activity = p.activity;
+    await db.addMessage(answer);
+    typing.replaceWith(bubble(answer));
+    window.scrollTo(0, document.body.scrollHeight);
+  };
+  const chips = el("div", { class: "chips" }, ...["오늘 어때?", "탄소 얼마나 흡수했어?", "뭐 도와줄까?", "날씨 어때?"].map(q => el("button", { type: "button", class: "chip btn-chip", onclick: () => send(q) }, q)));
+  const composer = el("form", { class: "composer", onsubmit: e => { e.preventDefault(); send(input.value); } }, input, el("button", { type: "submit", class: "btn" }, "보내기"));
+  box.replaceChildren(el("div", { class: "chat" },
+    el("header", { class: "chat-head" }, el("a", { class: "back", href: `#tree/${encodeURIComponent(id)}` }, "←"), avatar(t, { size: 40, mood }),
+      el("div", {}, el("b", {}, t.name), el("span", { class: "sub" }, ` ${t.species} · ${t.road}`)), el("span", { class: "online" }, "● 지금 여기")),
+    list, chips, composer));
+  requestAnimationFrame(() => { window.scrollTo(0, document.body.scrollHeight); });
+}
+
+main();

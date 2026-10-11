@@ -1,0 +1,36 @@
+{
+  "version": "0.1.0-draft",
+  "status": "assumption",
+  "note": "SNS 활동의 기여 점수와 생활 실천의 감축 환산 계수. 환산 계수는 흔히 인용되는 어림값이며 공식 자료(환경부 탄소중립포인트, 온실가스 배출계수)로 교체하기 전까지 '추정(검증 전)'으로 표시한다. 돌봄 활동은 감축량을 매기지 않고 점수만 준다.",
+  "levels": [
+    {"min": 0, "name": "새싹 친구"},
+    {"min": 50, "name": "잎사귀 친구"},
+    {"min": 150, "name": "가지 친구"},
+    {"min": 400, "name": "그늘 친구"},
+    {"min": 1000, "name": "숲 지킴이"}
+  ],
+  "daily_limit_per_tree": 3,
+  "care": [
+    {"id": "water", "label": "물주기", "icon": "💧", "points": 10, "hint": "한 통(약 10L)을 뿌리 주변에 천천히"},
+    {"id": "tidy", "label": "주변 정리", "icon": "🧹", "points": 8, "hint": "쓰레기 줍기, 뿌리 주변 흙 다져 주기"},
+    {"id": "mulch", "label": "뿌리 덮개", "icon": "🍂", "points": 12, "hint": "낙엽·나무껍질로 뿌리 주변 덮기(줄기에 닿지 않게)"},
+    {"id": "report", "label": "훼손 신고", "icon": "🚨", "points": 15, "hint": "부러진 가지, 줄기 상처, 지지대 파손을 시에 알리기"},
+    {"id": "measure", "label": "둘레 재기", "icon": "📏", "points": 20, "needs": "circ", "hint": "땅에서 1.2m 높이의 둘레를 줄자로"},
+    {"id": "observe", "label": "사진 관찰", "icon": "📷", "points": 5, "needs": "photo", "hint": "잎·꽃·열매·가지 상태를 사진으로"}
+  ],
+  "practice": [
+    {"id": "tumbler", "label": "텀블러·다회용컵", "icon": "🥤", "points": 3, "kg": 0.011, "per": "1회", "basis": "일회용 종이컵 1개 약 11 gCO₂e로 가정. 공식 계수 확인 필요"},
+    {"id": "transit", "label": "대중교통 (승용차 대신)", "icon": "🚌", "points": 8, "kg": 1.2, "per": "1회, 약 10km", "basis": "승용차 약 0.17 kgCO₂/km, 시내버스 1인당 약 0.05 kgCO₂/km로 가정한 차이. 공식 계수 확인 필요"},
+    {"id": "walkbike", "label": "걷기·자전거 (승용차 대신)", "icon": "🚲", "points": 6, "kg": 0.5, "per": "1회, 약 3km", "basis": "승용차 약 0.17 kgCO₂/km로 가정. 공식 계수 확인 필요"},
+    {"id": "bag", "label": "장바구니 사용", "icon": "🛍️", "points": 2, "kg": 0.01, "per": "1회", "basis": "비닐봉투 1장 약 10 gCO₂e로 가정. 공식 계수 확인 필요"},
+    {"id": "ereceipt", "label": "전자영수증", "icon": "🧾", "points": 1, "kg": 0.003, "per": "1회", "basis": "종이영수증 1장 약 3 gCO₂e로 가정. 공식 계수 확인 필요"},
+    {"id": "leftover", "label": "잔반 없이 식사", "icon": "🍚", "points": 4, "kg": 0.2, "per": "1끼", "basis": "음식물쓰레기 약 100g 줄임 × 처리 배출 약 2 kgCO₂e/kg로 가정. 공식 계수 확인 필요"},
+    {"id": "unplug", "label": "안 쓰는 전등·플러그 끄기", "icon": "🔌", "points": 3, "kg": 0.2, "per": "하루", "basis": "약 0.5 kWh 절감 × 전력 배출계수 약 0.45 kgCO₂/kWh로 가정. 공식 계수 확인 필요"},
+    {"id": "recycle", "label": "분리배출 제대로", "icon": "♻️", "points": 2, "kg": null, "per": "1회", "basis": "감축량 환산 근거가 약해 점수만 준다"}
+  ],
+  "protection": {
+    "status": "assumption",
+    "care_effect_days": 7,
+    "note": "돌봄 활동 뒤 7일 동안 나무의 일일 흡수량을 '돌보는 동안 흡수한 양'으로 집계한다. 돌봄이 생존·생장을 얼마나 바꾸는지는 연구로 검증하기 전이므로, 이 값은 '나무가 흡수한 양'이지 '돌봄으로 늘어난 양'이 아니다."
+  }
+}

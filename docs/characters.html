@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>우리동네가로수 · 수종별 캐릭터</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="home.css">
+<style>
+  body { display: block; padding: 16px; }
+  .gal { display: grid; gap: 18px; max-width: 1100px; margin: 0 auto; }
+  .sp { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .sp h2 { font-size: 16px; margin-bottom: 6px; }
+  .sp .rowx { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+  .sp figure { margin: 0; display: grid; justify-items: center; font-size: 11px; color: var(--muted); }
+  .ctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+</style>
+</head>
+<body class="app">
+<div class="gal">
+  <div><a href="./">← 홈</a></div>
+  <h1>수종별 나무 캐릭터</h1>
+  <p class="small">같은 뼈대로 그린 두 가지 그림입니다. 캐릭터(얼굴)는 인트로·SNS에, 실물풍은 동네 찾기 화면에 씁니다. 크기는 흉고로 추정한 높이·수관폭을 따릅니다.</p>
+  <div class="ctl">
+    <label>흉고 <input id="dbh" type="range" min="5" max="80" value="25"> <output id="dbhOut">25</output>cm</label>
+    <label>기분 <select id="mood"><option>happy</option><option>proud</option><option>thirsty</option><option>hot</option><option>cold</option><option>sleepy</option><option>sad</option></select></label>
+  </div>
+  <div id="list"></div>
+</div>
+<script type="module">
+import { treeSVG } from "./js/characters.js";
+const [S, F] = await Promise.all([fetch("data/summary.json").then(r => r.json()), fetch("data/tree_form.json").then(r => r.json())]);
+const list = document.getElementById("list"), dbh = document.getElementById("dbh"), mood = document.getElementById("mood");
+function render() {
+  document.getElementById("dbhOut").textContent = dbh.value;
+  list.replaceChildren(...S.species.map(s => {
+    const info = S.species_info[s.species];
+    const box = document.createElement("section"); box.className = "sp";
+    box.innerHTML = `<h2>${s.species} <small class="small">${info.scientific_name} · ${s.count.toLocaleString("ko-KR")}그루</small></h2><div class="rowx"></div>`;
+    const row = box.querySelector(".rowx");
+    for (const style of ["character", "real"]) for (const season of ["spring", "summer", "autumn", "winter"]) {
+      const f = document.createElement("figure");
+      f.innerHTML = treeSVG({ species: s.species, info, dbh: Number(dbh.value), form: F, season, style, mood: mood.value, size: 110 }) + `<figcaption>${style === "real" ? "실물풍" : "캐릭터"} · ${{ spring: "봄", summer: "여름", autumn: "가을", winter: "겨울" }[season]}</figcaption>`;
+      row.append(f);
+    }
+    return box;
+  }));
+}
+dbh.addEventListener("input", render); mood.addEventListener("change", render);
+render();
+</script>
+</body>
+</html>

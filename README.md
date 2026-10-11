@@ -12,6 +12,32 @@
 
 GitHub Pages가 `main` 브랜치의 `docs/`를 그대로 배포한다.
 
+### 홈 앱 (`docs/index.html`, `docs/js/home.js`)
+
+전체 지도 대신 나무 캐릭터와 SNS로 들어가는 네 단계 흐름이다. 휴대폰 세로 화면 기준으로 만들었다.
+
+1. **인트로**: 전주 가로수를 수종별 캐릭터(상위 9종, 크기는 그루 수)로 요약한 시작 화면.
+2. **전주 현황** (`#city`): 오늘 전주 가로수가 들이마시는 CO₂를 하루 단위로 보여 준다. 연간 흡수량을 서리 없는 생육기간(202일, 7월 20일 중심 사인 곡선)에
+   나눠 배분한 가정값이다(`docs/js/daily.js`). 한 해 곡선, 수종별 캐릭터와 오늘 흡수량, 날씨 칩(Open-Meteo, 키 없음).
+3. **동네 찾기** (`#near`): 동·도로 이름은 `docs/data/places.json`(동 73개·도로 510개 중심 좌표) 색인으로, 번지·건물은
+   OpenStreetMap Nominatim으로 찾는다. 반경 200/300/500m 안의 가로수를 가까운 순서로 '거리 풍경'에 실물풍 그림으로 늘어놓고,
+   누르면 카드(흉고·추정 높이·연간 흡수 범위)와 '친구 맺기'가 뜬다. 내 위치(GPS)도 된다.
+4. **나무 SNS** (`#sns`, `#tree/<id>`, `#chat/<id>`): 친구 맺은 나무마다 이름을 짓고, 프로필(기분·점수·레벨·오늘/함께한 뒤/돌보는 동안 흡수·내 실천 감축),
+   인스타그램 DM 모양의 1:1 대화(나무가 규칙 기반으로 답하고, 날씨에 맞는 돌봄을 먼저 제안한다 `docs/js/talk.js`, `docs/js/weather.js`),
+   돌봄 기록(물주기·주변 정리·뿌리 덮개·훼손 신고·둘레 재기·사진 관찰)과 생활 실천 기록(텀블러·대중교통·걷기·장바구니·전자영수증·잔반·절전·분리배출),
+   사진 올리기(긴 변 1024px JPEG로 압축), 기록 피드. 활동마다 기여 점수가 쌓이고 생활 실천은 감축량(kgCO₂e)으로 환산해 피드에 붙는다.
+
+- 수종별 캐릭터(`docs/js/characters.js`): 22종을 14개 원형(은행·벚·느티형·이팝·단풍·버즘·침엽 원뿔·향·히말라야시다·소나무·감·참·버들·아까시·모감주·목련·기타)으로
+  그린다. 얼굴 있는 캐릭터 스타일과 잎·껍질 질감을 넣은 실물풍 스타일, 봄·여름·가을·겨울, 기분 7가지. 크기는 `config/tree_form.json`의 흉고→높이·수관폭 추정을 따른다.
+  전체 목록은 `docs/characters.html`.
+- 점수·환산 계수(`config/activities.json` → `docs/data/activities.json`): 활동별 점수, 레벨 구간, 하루 기록 한도(나무·활동당 3회), 생활 실천의 kgCO₂e 환산 계수.
+  환산 계수는 흔히 인용되는 어림값이라 `status: assumption`이고 화면에 '추정'으로 표시한다. '돌보는 동안 흡수'는 돌봄 뒤 7일 동안의 일일 흡수량 합이며
+  나무가 흡수한 양이지 돌봄으로 늘어난 양이 아니다(`protection.note`).
+- 저장(`docs/js/db.js`): 내 나무·게시물(사진 Blob 포함)·대화를 IndexedDB `wg-sns`에 둔다. 서버 저장은 아직 없다. 옛 `wg-guardian`(localStorage) 보호자 기록은 처음 열 때 가져온다.
+- 공동보호자끼리의 대화와 동네 순위는 서버가 필요해 아직 없다.
+
+### 지도 (`docs/map.html`, `docs/js/app.js`, 연구용)
+
 - 지도: MapLibre + OpenFreeMap 배경지도, 전주 가로수(확대 14 이하는 묶음 표시), 도로 이름 검색, 수종 필터, 내 위치
 - 나무 카드: 연구2의 세 가지 탄소 표시 방식(① 단일값 ② 범위 ③ 범위+한계), 데이터로 만든 나무 이야기, 품질 등급
 - 보호자·관찰 기록: 기기(localStorage)에만 저장. 흉고둘레를 입력하면 `docs/js/carbon.js`가 브라우저에서 범위를 다시 계산한다
@@ -124,9 +150,11 @@ python -m venv .venv
 | `pipeline/aggregate.py` | 100 m 격자 배정(UTM-K) |
 | `pipeline/export_itree.py` | i-Tree Eco v6 가져오기용 CSV |
 | `pipeline/report.py`, `web/report_template.html` | 결과 보고서 |
-| `pipeline/export_web.py` | 웹 데모용 정적 데이터(`docs/data`)와 보고서(`docs/report`) |
-| `docs/` | 웹 데모(GitHub Pages) |
-| `tests/` | 파이프라인 테스트(pytest), 브라우저 계산 대조(`web_parity.mjs`) |
+| `pipeline/export_web.py` | 웹 데모용 정적 데이터(`docs/data`: 나무·요약·계수·장소 색인·활동 계수)와 보고서(`docs/report`) |
+| `config/activities.json` | SNS 활동 점수, 레벨, 생활 실천 감축 환산 계수(검증 전) |
+| `docs/` | 웹 데모(GitHub Pages). `index.html` 홈 앱, `map.html` 지도, `characters.html` 캐릭터 목록, `study/` 연구4 실험 |
+| `docs/js/` | `home.js` 화면 흐름, `characters.js` 캐릭터, `daily.js` 일일 흡수, `geo.js` 동네 찾기, `weather.js` 날씨·돌봄 제안, `talk.js` 나무 대화, `db.js` 기기 저장, `carbon.js` 탄소, `map3d.js`·`tree3d.js` 3D |
+| `tests/` | 파이프라인 테스트(pytest), 브라우저 계산 대조(`web_parity.mjs`), 홈 모듈 검사(`web_home.mjs`: 캐릭터 2,112장·일일 흡수·색인·날씨 제안) |
 
 ## 출력 (`data/out/<입력 파일 이름>/`, 저장소에는 올리지 않음)
 

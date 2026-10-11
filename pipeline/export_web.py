@@ -9,19 +9,51 @@ run_all이 만든 carbon_profiles.csv·results.json을 읽어, 지도가 바로 
 
 import argparse
 import json
+import re
 import shutil
 
 import pandas as pd
 
 from . import carbon, etl
-from .schema import CONFIG_DIR, OUT_DIR, ROOT
+from .schema import CONFIG_DIR, OUT_DIR, RAW_DIR, ROOT
 
 DOCS = ROOT / "docs"
 GRADES = ["A", "B", "C", "X"]
+# 구간 시점·종점명("호성동1가 743-158 잡")에서 동 이름만 뽑는다
+DONG_PATTERN = re.compile(r"([가-힣]{1,6}(?:동|가|리)(?:\d+가)?)")
 
 
 def _round_list(series, digits):
     return [None if pd.isna(v) else round(float(v), digits) for v in series]
+
+
+def dong_by_tree(dataset: str) -> dict[str, str]:
+    """원자료의 구간 시점·종점명에서 나무별 동 이름을 찾는다. 원자료가 없으면 빈 dict."""
+    raw = RAW_DIR / f"{dataset}.csv"
+    if not raw.exists():
+        return {}
+    df = etl.read_source(raw)
+    found = {}
+    for tid, start, end in zip(df["tree_no"].astype(str), df["section_start"].fillna(""), df["section_end"].fillna("")):
+        if tid in found:
+            continue
+        m = DONG_PATTERN.search(str(start)) or DONG_PATTERN.search(str(end))
+        if m:
+            found[tid] = m.group(1)
+    return found
+
+
+def places(df: pd.DataFrame) -> list[dict]:
+    """주소 검색용 장소 목록: 동과 도로구간마다 나무 수와 중심 좌표."""
+    out = []
+    for kind, col in (("dong", "dong"), ("road", "road_section")):
+        if col not in df.columns:
+            continue
+        grouped = df.dropna(subset=[col]).groupby(col)
+        for name, g in grouped:
+            out.append({"kind": kind, "name": str(name), "count": int(len(g)),
+                        "lon": round(float(g["lon"].mean()), 5), "lat": round(float(g["lat"].mean()), 5)})
+    return sorted(out, key=lambda p: (p["kind"], -p["count"]))
 
 
 def export(dataset: str) -> dict:
@@ -35,9 +67,13 @@ def export(dataset: str) -> dict:
     sp_idx = {s: i for i, s in enumerate(species)}
     rd_idx = {r: i for i, r in enumerate(roads)}
     issues = df["issues"].fillna("")
+    df["dong"] = df["tree_id"].map(dong_by_tree(dataset))
+    dongs = sorted(df["dong"].dropna().unique())
+    dong_idx = {d: i for i, d in enumerate(dongs)}
     trees = {
-        "species": species, "roads": roads, "grades": GRADES,
+        "species": species, "roads": roads, "dongs": dongs, "grades": GRADES,
         "id": df["tree_id"].tolist(),
+        "dong": [None if pd.isna(d) else dong_idx[d] for d in df["dong"]],
         "lon": _round_list(df["lon"], 6), "lat": _round_list(df["lat"], 6),
         "dbh": _round_list(df["dbh_cm"], 1),
         "sp": df["species_ko"].map(sp_idx).tolist(),
@@ -71,8 +107,10 @@ def export(dataset: str) -> dict:
     (out / "trees.json").write_text(json.dumps(trees, **compact), encoding="utf-8")
     (out / "summary.json").write_text(json.dumps(summary, **compact), encoding="utf-8")
     (out / "params.json").write_text(json.dumps(carbon.load_params(), **compact), encoding="utf-8")
+    (out / "places.json").write_text(json.dumps(places(df), **compact), encoding="utf-8")
     shutil.copyfile(CONFIG_DIR / "boundaries" / "jeonju_osm.geojson", out / "boundary.geojson")
     shutil.copyfile(CONFIG_DIR / "tree_form.json", out / "tree_form.json")
+    shutil.copyfile(CONFIG_DIR / "activities.json", out / "activities.json")
 
     reports = DOCS / "report"
     reports.mkdir(parents=True, exist_ok=True)
@@ -87,7 +125,8 @@ def export(dataset: str) -> dict:
                         '<style>body{margin:0}[hidden]{display:none!important}</style>\n</head>\n<body>\n'
                         + html + "\n</body>\n</html>\n")
             (reports / target).write_text(html, encoding="utf-8")
-    return {"trees": len(df), "species": len(species), "roads": len(roads),
+    return {"trees": len(df), "species": len(species), "roads": len(roads), "dongs": len(dongs),
+            "trees_without_dong": int(df["dong"].isna().sum()),
             "bytes": {p.name: p.stat().st_size for p in out.iterdir()}}
 
 
