@@ -27,6 +27,9 @@ GitHub Pages가 `main` 브랜치의 `docs/`를 그대로 배포한다.
    돌봄 기록(물주기·주변 정리·뿌리 덮개·훼손 신고·둘레 재기·사진 관찰)과 생활 실천 기록(텀블러·대중교통·걷기·장바구니·전자영수증·잔반·절전·분리배출),
    사진 올리기(긴 변 1024px JPEG로 압축), 기록 피드. 활동마다 기여 점수가 쌓이고 생활 실천은 감축량(kgCO₂e)으로 환산해 피드에 붙는다.
 
+- 동 배정: 나무의 '동'은 좌표를 전주시 **행정동 경계 35개**(`config/boundaries/jeonju_hangjeongdong.geojson`, vuski/admdongkor ver20260701, 통계청·행안부 경계 기반)에 넣어 정한다.
+  원본의 구간 시점·종점 글자에서 뽑은 법정동은 구간이 여러 동을 지나 틀리는 경우가 많아(예: 83488은 글자로는 진북동, 좌표로는 금암동) 검색 별칭(`places.json`의 `jibun`)으로만 쓴다.
+  나무 카드의 '지도 주소'는 카드를 열 때 OpenStreetMap 역지오코딩으로 받은 도로명·법정동이며, 원본 도로명과 다르면 경고를 띄운다.
 - 위치 확인(`docs/js/minimap.js`): 동네 찾기에는 기준 위치(주황)와 근처 나무(초록)를 찍은 작은 지도가, 나무 프로필에는 그 나무 한 그루의 지도가 붙는다
   (MapLibre + OpenFreeMap, 처음 쓸 때만 불러옴). 나무 카드에는 실물을 찾는 데 필요한 식별 정보 — 관리번호(산림청 시군구별 번호), 도로, 구간(시점 → 종점, `trees.json`의 `sections`),
   동, 좌표, 흉고, 품질 등급 — 와 카카오맵 보기·길찾기, 구글 지도, 연구용 전체 지도 링크가 있다.
@@ -167,6 +170,7 @@ python -m venv .venv
 | `config/species.csv` | 수종 정규화(별칭), 학명, 상대생장식 대리 수종군, 생장 유형, 성숙 수고 등급 |
 | `config/carbon_params.json` | 계수·범위·출처·검증 상태, 시나리오 |
 | `config/boundaries/jeonju_osm.geojson` | 전주시 경계(OpenStreetMap relation 7619919, ODbL) |
+| `config/boundaries/jeonju_hangjeongdong.geojson` | 전주시 행정동 경계 35개(vuski/admdongkor, 통계청·행안부 경계 기반) — 나무의 동 배정용 |
 | `pipeline/make_sample.py` | 산림청 스키마의 합성 샘플(전북대 주변 가상 구간 5개, 결측·이상치 포함) |
 | `pipeline/extract_region.py` | 전국 원본에서 한 도시의 행만 추출(시군구명 또는 행정경계) |
 | `pipeline/etl.py` | 수종·흉고 정제, 좌표계 변환(WGS84), 범위·중복·일괄 입력 검사, 품질 등급 A/B/C/X |

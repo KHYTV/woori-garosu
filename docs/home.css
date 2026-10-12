@@ -239,3 +239,5 @@ body.intro-mode .topbar { display: none; }
 .map-links a { font-size: 12.5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; text-decoration: none; color: var(--ink-2); background: var(--surface); }
 .map-links a:hover { border-color: var(--accent); color: var(--accent); }
 .meta.ident dd.num { font-size: 13px; }
+.meta.ident dd.addr .warn { color: var(--serious); }
+.meta.ident dd .sub { display: block; }

@@ -1,7 +1,7 @@
 // 우리동네가로수 화면 흐름: 인트로 → 전주 현황 → 동네 찾기 → 나무 SNS(프로필·대화·기록)
 import { treeSVG, archetype, seasonForDate, moodFor, hashSeed } from "./characters.js";
 import { dailyUptake, dailyWeight, cumulativeThisYear, uptakeBetween, yearProfile, dayOfYear, seasonWindow } from "./daily.js";
-import { nearestTrees, searchPlaces, geocode, locate, insideJeonju, distanceM, JEONJU } from "./geo.js";
+import { nearestTrees, searchPlaces, geocode, reverseGeocode, locate, insideJeonju, distanceM, JEONJU } from "./geo.js";
 import { createMiniMap } from "./minimap.js";
 import { fetchWeather, weatherLabel, careSuggestions } from "./weather.js";
 import { db, compressImage } from "./db.js";
@@ -239,6 +239,7 @@ function levelOf(points) {
 }
 const MOOD_KO = { happy: "기분 좋아요", thirsty: "목이 말라요", hot: "더워요", cold: "추워요", sleepy: "겨울잠 중", proud: "뿌듯해요", sad: "오랜만이에요" };
 const SEASON_KO = { spring: "봄", summer: "여름", autumn: "가을", winter: "겨울" };
+const PLACE_KIND = { dong: "행정동", jibun: "지번 동(원본 주소)", road: "도로" };
 // 잘리지 않은 캐릭터 전신 그림
 function figure(rec, { size = 140, mood = "happy", caption = null } = {}) {
   const f = el("figure", { class: "tree-fig sway" }, svg(treeSVG({ species: rec.species, info: rec.info, dbh: rec.dbh || 15, form: FORM, season, style: "character", mood, seed: hashSeed(rec.id), size, label: rec.name || rec.species })));
@@ -401,7 +402,7 @@ function renderNear() {
     const input = el("input", { id: "addr", type: "search", list: "placeList", placeholder: "동·도로·주소 (예: 효자동 백제대로, 명륜1길 10)", autocomplete: "off", "aria-label": "동네 주소" });
     const list = el("datalist", { id: "placeList" });
     input.addEventListener("input", () => {
-      list.replaceChildren(...searchPlaces(PLACES, input.value).map(p => el("option", { value: p.name }, `${p.kind === "dong" ? "동" : "도로"} · ${nf(p.count)}그루`)));
+      list.replaceChildren(...searchPlaces(PLACES, input.value).map(p => el("option", { value: p.name }, `${PLACE_KIND[p.kind] || p.kind} · ${nf(p.count)}그루`)));
     });
     const form = el("form", { class: "addr-form", onsubmit: async e => { e.preventDefault(); await findByText(input.value); } },
       el("label", { class: "field grow" }, input), list,
@@ -431,7 +432,7 @@ async function findByText(q) {
   // 동·도로 이름만이면 색인으로, 숫자(번지)나 모르는 말이 섞이면 지오코딩
   const exact = local && words.every(w => local.name.includes(w));
   if (exact) {
-    state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name}(${local.kind === "dong" ? "동 중심" : "도로 중심"}) 주변`;
+    state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name}(${PLACE_KIND[local.kind] || local.kind} 중심) 주변`;
     return runNear();
   }
   $("#nearLabel").textContent = "주소를 찾는 중…";
@@ -442,7 +443,7 @@ async function findByText(q) {
     return runNear();
   }
   if (local) {
-    state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name} 주변 (주소는 못 찾아 가까운 ${local.kind === "dong" ? "동" : "도로"}으로)`;
+    state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name} 주변 (주소는 못 찾아 가까운 ${PLACE_KIND[local.kind] || local.kind}으로)`;
     return runNear();
   }
   $("#nearLabel").textContent = "";
@@ -497,12 +498,21 @@ function renderStreet() {
 }
 // 실물 확인용 식별 정보
 function identRows(r, extra = []) {
+  // 지도 위치의 실제 주소는 OSM에서 한 번 받아 채운다(좌표 기준이라 원본 구간 글자보다 정확)
+  const addr = el("dd", { class: "addr" }, "지도에서 주소 확인 중…");
+  reverseGeocode(r.lon, r.lat).then(a => {
+    addr.replaceChildren(a?.text ? el("span", {}, a.text, el("small", { class: "sub" }, " · OpenStreetMap 기준")) : el("span", { class: "sub" }, "지도 주소를 받지 못했어요"));
+    if (a?.road && !r.road.includes(a.road) && !a.road.includes(r.road)) {
+      addr.append(el("div", { class: "sub warn" }, `원본 도로명(${r.road})과 지도 도로명(${a.road})이 달라요. 교차로 근처이거나 원본 오류일 수 있어요.`));
+    }
+  });
   return el("dl", { class: "meta ident" },
     el("dt", {}, "관리번호"), el("dd", { class: "num" }, `${r.id} (산림청 시군구별 번호)`),
-    el("dt", {}, "도로"), el("dd", {}, r.road),
-    r.section ? el("dt", {}, "구간") : null, r.section ? el("dd", {}, r.section) : null,
-    r.dong ? el("dt", {}, "동") : null, r.dong ? el("dd", {}, r.dong) : null,
+    el("dt", {}, "지도 주소"), addr,
+    r.dong ? el("dt", {}, "행정동") : null, r.dong ? el("dd", {}, `${r.dong} (좌표 기준)`) : null,
     el("dt", {}, "좌표"), el("dd", { class: "num" }, `${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}`),
+    el("dt", {}, "원본 도로"), el("dd", {}, r.road),
+    r.section ? el("dt", {}, "원본 구간") : null, r.section ? el("dd", {}, r.section, el("div", { class: "sub" }, "산림청 자료의 도로구간 시점 → 종점. 나무가 그 사이 어디든 있을 수 있어요.")) : null,
     el("dt", {}, "흉고직경"), el("dd", {}, r.dbh ? `${nf(r.dbh)}cm${r.block ? " (같은 구간 대표값 의심)" : ""}` : "없음"),
     el("dt", {}, "데이터 품질"), el("dd", {}, `등급 ${r.grade}`),
     ...extra);

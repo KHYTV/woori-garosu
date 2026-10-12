@@ -13,6 +13,8 @@ import re
 import shutil
 
 import pandas as pd
+from shapely.geometry import Point, shape
+from shapely.prepared import prep
 
 from . import carbon, etl
 from .schema import CONFIG_DIR, OUT_DIR, RAW_DIR, ROOT
@@ -48,10 +50,37 @@ def dong_by_tree(dataset: str) -> dict[str, str]:
     return {k: v["dong"] for k, v in raw_by_tree(dataset).items() if v["dong"]}
 
 
+HJD_FILE = CONFIG_DIR / "boundaries" / "jeonju_hangjeongdong.geojson"
+
+
+def load_hangjeongdong():
+    """전주시 행정동 경계(vuski/admdongkor, 통계청·행안부 경계 기반). [(이름, prepared polygon)]"""
+    if not HJD_FILE.exists():
+        return []
+    gj = json.loads(HJD_FILE.read_text(encoding="utf-8"))
+    out = []
+    for f in gj["features"]:
+        name = f["properties"]["adm_nm"].split()[-1]
+        out.append((name, prep(shape(f["geometry"]))))
+    return out
+
+
+def assign_dong(lons, lats, polygons) -> list:
+    """좌표가 들어 있는 행정동 이름. 경계 밖이면 None. 구간 이름 글자에서 뽑는 것보다 정확하다."""
+    out = []
+    for lon, lat in zip(lons, lats):
+        if pd.isna(lon) or pd.isna(lat):
+            out.append(None)
+            continue
+        pt = Point(float(lon), float(lat))
+        out.append(next((name for name, poly in polygons if poly.contains(pt)), None))
+    return out
+
+
 def places(df: pd.DataFrame) -> list[dict]:
     """주소 검색용 장소 목록: 동과 도로구간마다 나무 수와 중심 좌표."""
     out = []
-    for kind, col in (("dong", "dong"), ("road", "road_section")):
+    for kind, col in (("dong", "dong"), ("jibun", "jibun_dong"), ("road", "road_section")):
         if col not in df.columns:
             continue
         grouped = df.dropna(subset=[col]).groupby(col)
@@ -73,8 +102,11 @@ def export(dataset: str) -> dict:
     rd_idx = {r: i for i, r in enumerate(roads)}
     issues = df["issues"].fillna("")
     raw = raw_by_tree(dataset)
-    df["dong"] = df["tree_id"].map({k: v["dong"] for k, v in raw.items()})
     df["section"] = df["tree_id"].map({k: v["section"] for k, v in raw.items()})
+    # 동은 좌표를 행정동 경계에 넣어 정한다. 경계 파일이 없을 때만 구간 이름 글자(법정동)로 대신한다
+    polygons = load_hangjeongdong()
+    df["jibun_dong"] = df["tree_id"].map({k: v["dong"] for k, v in raw.items()})
+    df["dong"] = assign_dong(df["lon"], df["lat"], polygons) if polygons else df["jibun_dong"]
     dongs = sorted(df["dong"].dropna().unique())
     dong_idx = {d: i for i, d in enumerate(dongs)}
     sections = sorted(df["section"].dropna().unique())
@@ -136,6 +168,7 @@ def export(dataset: str) -> dict:
                         + html + "\n</body>\n</html>\n")
             (reports / target).write_text(html, encoding="utf-8")
     return {"trees": len(df), "species": len(species), "roads": len(roads), "dongs": len(dongs),
+            "dong_source": "행정동 경계(좌표)" if polygons else "구간 이름 글자(법정동)",
             "trees_without_dong": int(df["dong"].isna().sum()),
             "bytes": {p.name: p.stat().st_size for p in out.iterdir()}}
 

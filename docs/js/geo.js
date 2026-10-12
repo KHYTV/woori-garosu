@@ -62,6 +62,21 @@ export async function geocode(q) {
   }
 }
 
+// 좌표 → OSM 주소(도로명·법정동·지번). 나무 카드를 열 때 한 번만 부른다. 실패하면 null
+export async function reverseGeocode(lon, lat) {
+  const wait = 1100 - (Date.now() - lastGeocode);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  lastGeocode = Date.now();
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=ko&lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`, { headers: { Accept: "application/json" } });
+    if (!r.ok) return null;
+    const a = (await r.json()).address || {};
+    const dong = a.quarter || a.village || a.neighbourhood || null, hjd = a.suburb || null;
+    return { road: a.road || null, dong, hjd, number: a.house_number || null, gu: a.borough || a.city_district || null,
+      text: [a.borough || a.city_district, dong, a.road, a.house_number].filter(Boolean).join(" ") || null };
+  } catch { return null; }
+}
+
 export function locate() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error("이 기기에서는 위치를 쓸 수 없습니다."));
