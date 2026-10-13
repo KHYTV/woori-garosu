@@ -65,15 +65,28 @@ def load_hangjeongdong():
     return out
 
 
-def assign_dong(lons, lats, polygons) -> list:
-    """좌표가 들어 있는 행정동 이름. 경계 밖이면 None. 구간 이름 글자에서 뽑는 것보다 정확하다."""
+EDGE_M = 30  # 이 거리 안이면 '동 경계 근처'로 표시한다(좌표 오차로 이웃 동일 수 있음)
+
+
+def assign_dong(lons, lats, polygons, with_edge=False):
+    """좌표가 들어 있는 행정동 이름. 경계 밖이면 None. 구간 이름 글자에서 뽑는 것보다 정확하다.
+    with_edge=True면 (이름, 경계 근처 여부) 쌍을 돌려준다."""
     out = []
     for lon, lat in zip(lons, lats):
         if pd.isna(lon) or pd.isna(lat):
-            out.append(None)
+            out.append((None, False) if with_edge else None)
             continue
         pt = Point(float(lon), float(lat))
-        out.append(next((name for name, poly in polygons if poly.contains(pt)), None))
+        hit = next(((name, poly) for name, poly in polygons if poly.contains(pt)), None)
+        if not with_edge:
+            out.append(hit[0] if hit else None)
+            continue
+        if not hit:
+            out.append((None, False))
+            continue
+        # prepared geometry는 거리를 못 재므로 원본 경계를 쓴다
+        edge = hit[1].context.boundary.distance(pt) * 111320 * 0.9 < EDGE_M  # 위도 36도 근처의 도 단위 → m 어림
+        out.append((hit[0], bool(edge)))
     return out
 
 
@@ -106,7 +119,13 @@ def export(dataset: str) -> dict:
     # 동은 좌표를 행정동 경계에 넣어 정한다. 경계 파일이 없을 때만 구간 이름 글자(법정동)로 대신한다
     polygons = load_hangjeongdong()
     df["jibun_dong"] = df["tree_id"].map({k: v["dong"] for k, v in raw.items()})
-    df["dong"] = assign_dong(df["lon"], df["lat"], polygons) if polygons else df["jibun_dong"]
+    if polygons:
+        assigned = assign_dong(df["lon"], df["lat"], polygons, with_edge=True)
+        df["dong"] = [a[0] for a in assigned]
+        df["dong_edge"] = [int(a[1]) for a in assigned]
+    else:
+        df["dong"] = df["jibun_dong"]
+        df["dong_edge"] = 0
     dongs = sorted(df["dong"].dropna().unique())
     dong_idx = {d: i for i, d in enumerate(dongs)}
     sections = sorted(df["section"].dropna().unique())
@@ -116,6 +135,7 @@ def export(dataset: str) -> dict:
         "id": df["tree_id"].tolist(),
         "dong": [None if pd.isna(d) else dong_idx[d] for d in df["dong"]],
         "sec": [None if pd.isna(x) else sec_idx[x] for x in df["section"]],
+        "dong_edge": df["dong_edge"].astype(int).tolist(),
         "lon": _round_list(df["lon"], 6), "lat": _round_list(df["lat"], 6),
         "dbh": _round_list(df["dbh_cm"], 1),
         "sp": df["species_ko"].map(sp_idx).tolist(),
@@ -170,6 +190,7 @@ def export(dataset: str) -> dict:
     return {"trees": len(df), "species": len(species), "roads": len(roads), "dongs": len(dongs),
             "dong_source": "행정동 경계(좌표)" if polygons else "구간 이름 글자(법정동)",
             "trees_without_dong": int(df["dong"].isna().sum()),
+            "trees_near_dong_edge": int(df["dong_edge"].sum()),
             "bytes": {p.name: p.stat().st_size for p in out.iterdir()}}
 
 

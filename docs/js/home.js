@@ -199,7 +199,8 @@ function goBack() {
   go(arg && ["#tree", "#photo"].includes(parent) ? `${parent}/${arg}` : parent);
 }
 function route() {
-  const [name, arg] = (location.hash.slice(1) || "intro").split("/");
+  // "#near?q=효자동"처럼 물음표 뒤는 화면 이름에서 뗀다
+  const [name, arg] = (location.hash.slice(1).split("?")[0] || "intro").split("/");
   const id = arg ? decodeURIComponent(arg) : null;
   const here = location.hash || "#intro";
   if (navStack[navStack.length - 1] !== here) navStack.push(here);
@@ -221,7 +222,7 @@ function treeRecord(i) {
   const species = T.species[T.sp[i]], info = S.species_info[species];
   const annual = T.seq[1][i] ?? T.point_seq[i] ?? 0;
   return { i, id: T.id[i], species, info, road: T.roads[T.rd[i]], dong: T.dong?.[i] != null ? T.dongs[T.dong[i]] : null,
-    section: T.sec?.[i] != null ? T.sections[T.sec[i]] : null, grade: T.grades[T.grade[i]], dbh: T.dbh[i], block: Boolean(T.block[i]),
+    section: T.sec?.[i] != null ? T.sections[T.sec[i]] : null, dongEdge: Boolean(T.dong_edge?.[i]), grade: T.grades[T.grade[i]], dbh: T.dbh[i], block: Boolean(T.block[i]),
     seq: T.seq.map(a => a[i]), annualKg: annual, lon: T.lon[i], lat: T.lat[i], heightM: T.dbh[i] ? estimateForm(T.dbh[i], info, FORM).h : null };
 }
 const timeAgo = iso => {
@@ -515,7 +516,7 @@ function identRows(r, extra = []) {
   return el("dl", { class: "meta ident" },
     el("dt", {}, "관리번호"), el("dd", { class: "num" }, `${r.id} (산림청 시군구별 번호)`),
     el("dt", {}, "지도 주소"), addr,
-    r.dong ? el("dt", {}, "행정동") : null, r.dong ? el("dd", {}, `${r.dong} (좌표 기준)`) : null,
+    r.dong ? el("dt", {}, "행정동") : null, r.dong ? el("dd", {}, `${r.dong} (좌표 기준)`, r.dongEdge ? el("div", { class: "sub" }, "동 경계에서 30m 안이라 이웃 동으로 잡힐 수 있어요.") : null) : null,
     el("dt", {}, "좌표"), el("dd", { class: "num" }, `${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}`),
     el("dt", {}, "원본 도로"), el("dd", {}, r.road),
     r.section ? el("dt", {}, "원본 구간") : null, r.section ? el("dd", {}, r.section, el("div", { class: "sub" }, "산림청 자료의 도로구간 시점 → 종점. 나무가 그 사이 어디든 있을 수 있어요.")) : null,
