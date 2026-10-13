@@ -24,6 +24,39 @@ const LEAF = { ginkgo: "#6fae52", cherry: "#4e8c48", zelkova: "#4f8f4b", plane: 
 const SPRING = { ginkgo: "#9ccc65", cherry: "#f3c3d1", fringe: "#f4f2e6", magnolia: "#f7f1ea", willow: "#b7d57a", locust: "#8fc06c" };
 const BLOSSOM_DOT = { cherry: "#fde8ef", fringe: "#ffffff", magnolia: "#ffffff", locust: "#f6f3e8", goldenrain: "#f2c230" };
 const EVERGREEN = new Set(["juniper", "cedar", "pine"]);
+// 디자인 후보 E의 마스코트 상징색: 계절과 상관없이 수종을 알아보는 색
+export const SIGNATURE = { 벚나무: "#E4572E", 은행나무: "#F2B705", 느티나무: "#4F9D5D", 이팝나무: "#E8EFE4", 단풍나무: "#B23A48", 중국단풍: "#D4572A",
+  양버즘나무: "#5A9A4E", 메타세쿼이아: "#B5652D", 회화나무: "#5F9E55", 히말라야시다: "#39694A", 팽나무: "#4F8F4B", 소나무: "#2F6B3F", 감나무: "#EF7B2B",
+  참나무: "#8A6A3A", 버드나무: "#86B55E", 삼나무: "#4F8A5A", 아까시나무: "#68A35A", 잎갈나무: "#C8962E", 모감주나무: "#F2C230", 향나무: "#2F5D3A", 목련: "#F3E9E4", 기타: "#5A8F4E" };
+export const WIDE = new Set(["느티나무", "팽나무", "회화나무", "참나무", "양버즘나무"]);
+export function signatureColor(species, info) { return SIGNATURE[species] || LEAF[archetype(species, info)] || "#5a8f4e"; }
+const CONE_TYPES = new Set(["conifer", "juniper", "cedar", "pine"]);
+
+// 마스코트(디자인 후보 E): 벌어진 밑동과 뿌리, 줄기에서 갈라지는 가지 3개, 둥근 덩어리 여러 개의 수관(아래는 짙게)
+function mascot(L, color, wide) {
+  const s = clamp(L.H, 130, 200) / 238;                 // 디자인 좌표(200×240, 밑동 y=238)를 나무 크기에 맞춰 줄인다
+  const w = wide ? 1.18 : 1;
+  const X = x => r1(CX + (x - 100) * s * (Math.abs(x - 100) > 30 ? w : 1)), Y = y => r1(BASE_Y + (y - 238) * s);
+  const bark = "#6B4A2B", barkDark = "#55381F";
+  const dark = shade(color, -0.2), light = shade(color, 0.16);
+  const sw = r1(9 * s);
+  const stroke = (d, width, col) => `<path d="${d}" stroke="${col}" stroke-width="${width}" stroke-linecap="round" fill="none"/>`;
+  const c = (x, y, r, fill) => `<circle cx="${X(x)}" cy="${Y(y)}" r="${r1(r * s)}" fill="${fill}"/>`;
+  const trunk = [
+    stroke(`M${X(86)} ${Y(236)} Q${X(70)} ${Y(228)} ${X(56)} ${Y(238)} M${X(114)} ${Y(236)} Q${X(130)} ${Y(228)} ${X(144)} ${Y(238)}`, sw, bark),
+    `<path d="M${X(84)} ${Y(238)} C${X(92)} ${Y(205)} ${X(92)} ${Y(180)} ${X(92)} ${Y(160)} L${X(108)} ${Y(160)} C${X(108)} ${Y(180)} ${X(108)} ${Y(205)} ${X(116)} ${Y(238)} Q${X(100)} ${Y(230)} ${X(84)} ${Y(238)}Z" fill="${bark}"/>`,
+    stroke(`M${X(97)} ${Y(228)} L${X(99)} ${Y(186)}`, r1(3 * s), barkDark),
+    stroke(`M${X(98)} ${Y(162)} Q${X(76)} ${Y(146)} ${X(wide ? 50 : 56)} ${Y(wide ? 120 : 116)} M${X(102)} ${Y(160)} Q${X(124)} ${Y(144)} ${X(wide ? 150 : 144)} ${Y(wide ? 116 : 112)} M${X(100)} ${Y(160)} Q${X(101)} ${Y(140)} ${X(104)} ${Y(122)}`, sw, bark),
+  ].join("");
+  const crown = [
+    c(wide ? 46 : 54, 92, 34, color), c(wide ? 154 : 146, 90, 36, color),
+    c(74, 112, 22, dark), c(126, 114, 22, dark), c(100, 114, 20, dark),
+    c(66, 36, 30, light), c(136, 34, 32, color),
+    c(100, 62, 56, color),
+  ].join("");
+  return { trunk, crown, face: { fy: Number(Y(66)), er: clamp(8 * s, 4.5, 9), dx: clamp(18 * s, 10, 18), cx: CX } };
+}
+
 
 export function archetype(species, info) {
   if (ARCHETYPE[species]) return ARCHETYPE[species];
@@ -292,12 +325,12 @@ function crown(type, L, pal, rand, season, real) {
 }
 
 // ---------- 얼굴 ----------
-function face(L, mood, pal, type) {
+function face(L, mood, pal, type, geom = null) {
   const { cx, top, crownH, CW } = L;
   const narrow = type === "conifer" || type === "juniper" || type === "cedar";
-  const fy = top + crownH * (narrow ? 0.6 : 0.52);
-  const dx = clamp(CW * 0.15, 10, 24);
-  const er = clamp(CW * 0.065, 5, 10);
+  const fy = geom ? geom.fy : top + crownH * (narrow ? 0.6 : 0.52);
+  const dx = geom ? geom.dx : clamp(CW * 0.15, 10, 24);
+  const er = geom ? geom.er : clamp(CW * 0.065, 5, 10);
   const ink = "#1f2a22";
   const eye = (x, closed) => closed
     ? `<path d="M${r1(x - er)} ${r1(fy)} q${r1(er)} ${r1(er * 0.9)} ${r1(er * 2)} 0" stroke="${ink}" stroke-width="${r1(clamp(er * 0.3, 2, 3))}" fill="none" stroke-linecap="round"/>`
@@ -341,10 +374,16 @@ export function treeSVG(o) {
   const real = style === "real";
   const parts = [];
   parts.push(`<ellipse cx="${CX}" cy="${BASE_Y + 4}" rx="${r1(Math.max(L.trunkW * 2.2, L.CW * 0.42))}" ry="6" fill="#000" opacity="${real ? 0.14 : 0.1}"/>`);
-  // 줄기와 가지를 먼저, 수관을 그 위에 그려 가지가 잎에 가려지게 한다
-  parts.push(`<g class="tree-trunk">${trunk(type, L, pal, rand)}</g><g class="tree-crown">${crown(type, L, pal, rand, season, real)}</g>`);
-  if (!real && !pal.bare) parts.push(face(L, mood, pal, type));
-  else if (!real && pal.bare) parts.push(face({ ...L, top: L.top + 4 }, mood === "happy" ? "sleepy" : mood, pal, type));
+  if (!real && !CONE_TYPES.has(type)) {
+    // 캐릭터는 계절과 상관없는 수종 상징색의 마스코트(디자인 후보 E)
+    const m = mascot(L, signatureColor(species, info), WIDE.has(species));
+    parts.push(`<g class="tree-trunk">${m.trunk}</g><g class="tree-crown">${m.crown}${face(L, mood, pal, type, m.face)}</g>`);
+  } else {
+    // 줄기와 가지를 먼저, 수관을 그 위에 그려 가지가 잎에 가려지게 한다
+    const pal2 = real ? pal : { ...pal, fill: signatureColor(species, info), bare: false, blossom: null };
+    parts.push(`<g class="tree-trunk">${trunk(type, L, pal2, rand)}</g><g class="tree-crown">${crown(type, L, pal2, rand, season, real)}</g>`);
+    if (!real) parts.push(face(L, mood, pal2, type));
+  }
   const aria = label || `${species} 캐릭터`;
   const w = size, h = Math.round(size * VIEW_H / VIEW_W);
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEW_W} ${VIEW_H}" width="${w}" height="${h}" class="tree tree-${type} season-${season} style-${style} mood-${mood}" role="img" aria-label="${esc(aria)}">${parts.join("")}</svg>`;

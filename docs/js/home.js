@@ -1,5 +1,5 @@
 // 우리동네가로수 화면 흐름: 인트로 → 전주 현황 → 동네 찾기 → 나무 SNS(프로필·대화·기록)
-import { treeSVG, archetype, seasonForDate, moodFor, hashSeed } from "./characters.js";
+import { treeSVG, archetype, seasonForDate, moodFor, hashSeed, signatureColor } from "./characters.js";
 import { dailyUptake, dailyWeight, cumulativeThisYear, uptakeBetween, yearProfile, dayOfYear, seasonWindow } from "./daily.js";
 import { nearestTrees, searchPlaces, geocode, reverseGeocode, locate, insideJeonju, distanceM, JEONJU } from "./geo.js";
 import { createMiniMap } from "./minimap.js";
@@ -183,14 +183,15 @@ function toast(text, bad = false) {
 function show(name) {
   for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== `s-${name}`;
   document.body.classList.toggle("intro-mode", name === "intro");
+  document.body.classList.toggle("map-mode", name === "map");
   for (const a of document.querySelectorAll(".tabbar a")) a.setAttribute("aria-current", a.dataset.screen === name ? "page" : "false");
   $("#topbarTitle").textContent = TITLES[name] || "";
   window.scrollTo(0, 0);
 }
 const setTitle = text => { $("#topbarTitle").textContent = text; };
 // 뒤로 가기: 앱 안에서 온 길이 있으면 그 길로, 처음 열었으면 상위 화면으로
-const TITLES = { city: "전주 현황", near: "동네 찾기", sns: "내 나무", tree: "나무", chat: "대화", group: "보호자 방", photo: "사진과 캐릭터", ar: "AR 보기" };
-const PARENT = { city: "#intro", near: "#city", sns: "#city", tree: "#sns", chat: "#tree", group: "#tree", photo: "#tree", ar: "#photo" };
+const TITLES = { city: "전주 현황", map: "지도", sns: "내 나무", tree: "나무", chat: "대화", group: "보호자 방", photo: "사진과 캐릭터", ar: "AR 보기" };
+const PARENT = { city: "#intro", map: "#intro", sns: "#city", tree: "#sns", chat: "#tree", group: "#tree", photo: "#tree", ar: "#photo" };
 const navStack = [];
 function goBack() {
   const [name, arg] = (location.hash.slice(1) || "intro").split("/");
@@ -205,7 +206,7 @@ function route() {
   const here = location.hash || "#intro";
   if (navStack[navStack.length - 1] !== here) navStack.push(here);
   if (name === "city") renderCity();
-  else if (name === "near") renderNear();
+  else if (name === "map" || name === "near") renderMap();
   else if (name === "sns") renderSNS();
   else if (name === "tree" && id) renderTree(id);
   else if (name === "chat" && id) renderChat(id);
@@ -215,7 +216,7 @@ function route() {
   else { renderIntro(); show("intro"); return; }
   if (name !== "group") { clearInterval(pollTimer); pollTimer = null; }
   if (name !== "ar") stopCamera();
-  show(name);
+  show(name === "near" ? "map" : name);
 }
 const go = hash => { location.hash = hash; };
 function treeRecord(i) {
@@ -305,35 +306,43 @@ async function importLegacyGuardians() {
   await db.setMeta("imported-legacy", true);
 }
 
-// ---------- 1. 인트로 ----------
+// ---------- 1. 인트로(디자인 후보 E) ----------
+const LOGO_SVG = `<svg viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="11" r="9" fill="currentColor"/><rect x="11.5" y="16" width="3" height="8" rx="1.5" fill="#15201A"/></svg>`;
+const PIN_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>`;
+const SEARCH_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>`;
+const LOCATE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>`;
+const CHEV_SVG = `<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>`;
+const BACK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>`;
+const INFO_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>`;
+const NAV_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l18-8-8 18-2-8z"/></svg>`;
+const CAM_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>`;
+const INTRO_SPECIES = ["이팝나무", "은행나무", "벚나무", "느티나무", "단풍나무"];
+
 function renderIntro() {
   const box = $("#s-intro");
   if (box.dataset.ready) return;
   box.dataset.ready = "1";
-  const top = S.species.slice(0, 9);
-  const maxCount = top[0].count;
-  const skyline = el("div", { class: "skyline sway", "aria-hidden": "true" },
-    ...top.map((s, k) => {
-      const info = S.species_info[s.species];
-      const size = Math.round(64 + 96 * Math.sqrt(s.count / maxCount));
-      const node = svg(treeSVG({ species: s.species, info, dbh: s.median_dbh, form: FORM, season, style: "character", mood: ["happy", "proud", "happy", "sleepy"][k % 4], seed: hashSeed(s.species), size }));
-      node.style.animationDelay = `${(k * 0.7) % 4}s`;
-      return el("figure", { class: "skyline-item", style: `--delay:${(k * 0.7) % 4}s` }, node,
-        el("figcaption", {}, el("b", {}, s.species), el("span", { class: "num" }, `${nf(s.count)}그루`)));
-    }));
+  const picks = INTRO_SPECIES.map(n => S.species.find(s => s.species === n)).filter(Boolean);
+  const maxCount = Math.max(...picks.map(s => s.count));
+  const skyline = el("div", { class: "skyline sway", "aria-hidden": "true" }, ...picks.map((s, k) => {
+    const weight = 0.55 + Math.sqrt(s.count / maxCount);
+    const node = svg(treeSVG({ species: s.species, info: S.species_info[s.species], dbh: s.median_dbh, form: FORM, season, style: "character", mood: k === 2 ? "proud" : "happy", seed: hashSeed(s.species), size: 160 }));
+    return el("figure", { class: "skyline-item", style: `--delay:${(k * 0.7) % 4}s;--grow:${weight.toFixed(2)}` }, node);
+  }));
+  const ground = el("div", { class: "intro-ground" }, ...picks.map(s => el("span", {}, el("b", {}, s.species), nf(s.count))));
   const total = S.quality.on_map, seq = S.totals.seq_t;
   box.replaceChildren(
     el("div", { class: "intro-sky" }),
     el("div", { class: "intro-inner" },
-      el("p", { class: "eyebrow" }, "전주시 · 시민참여형 가로수 돌봄"),
+      el("div", { class: "intro-top" }, el("span", { class: "intro-brand" }, svg(LOGO_SVG), "우리동네가로수"), el("span", { class: "intro-pill" }, "전주시 · 시민참여형 가로수 돌봄")),
       el("h1", { class: "intro-title" }, "우리동네", el("br"), "가로수"),
-      el("p", { class: "intro-lede" }, `전주 가로수 ${nf(total)}그루가 한 해 약 ${nf(seq[1])}톤의 CO₂를 들이마셔요. 우리 동네 나무와 친구가 되어 돌보고, 그 변화를 함께 기록해요.`),
-      skyline,
-      el("div", { class: "ground" }),
-      el("div", { class: "intro-actions" },
-        el("a", { class: "btn big", href: "#city" }, "시작하기"),
-        state.my.length ? el("a", { class: "btn big ghost", href: "#sns" }, `내 나무 ${state.my.length}그루 보기`) : el("a", { class: "btn big ghost", href: "#near" }, "우리동네 나무 찾기")),
-      el("p", { class: "intro-foot" }, "탄소 수치는 공공데이터로 추정한 값(검증 전)입니다 · ", el("a", { href: "map.html" }, "지도 보기"), " · ", el("a", { href: "report/jeonju.html" }, "데이터 보고서"))));
+      el("p", { class: "intro-lede" }, `전주 가로수 ${nf(total)}그루가 한 해 약 ${nf(seq[1])}톤의 CO₂를 들이마셔요. 집 앞 한 그루와 친구가 되어 돌보고 기록해요.`),
+      el("div", { class: "intro-spacer" }),
+      skyline, ground,
+      el("div", { class: "intro-panel" },
+        el("a", { class: "btn big", href: "#map?loc=1" }, svg(PIN_SVG), "내 위치 보기"),
+        el("a", { class: "btn big ghost", href: state.my.length ? "#sns" : "#city" }, state.my.length ? `내 나무 ${state.my.length}그루 보기` : "전주 현황 보기"),
+        el("p", { class: "intro-foot" }, "탄소 수치는 공공데이터로 추정한 값(검증 전)이에요 · ", el("a", { href: "map.html" }, "연구용 전체 지도")))));
 }
 
 // ---------- 2. 전주 현황 ----------
@@ -388,42 +397,67 @@ function renderCity() {
       el("p", { class: "limit" }, `연간 흡수량을 서리 없는 ${win.length}일(4월 ${win.start - 90}일쯤부터 10월 말)에 나눠 배분한 가정값입니다. 한여름에 가장 많고 겨울에는 0입니다.`)),
     el("h2", {}, "수종별 캐릭터"), el("p", { class: "small" }, "전주 가로수의 수종을 캐릭터로 요약했어요. 크기는 수종의 흉고 중앙값을 따릅니다."),
     speciesRow,
-    el("div", { class: "cta" }, el("a", { class: "btn big", href: "#near" }, "우리동네 가로수와 친구 맺기 →")),
+    el("div", { class: "cta" }, el("a", { class: "btn big", href: "#map" }, "우리동네 가로수와 친구 맺기 →")),
     el("p", { class: "notice" }, el("b", {}, "계수 검증 전 · 방법 시연용 "), "탄소 수치는 일부 가정값으로 계산한 추정 범위입니다. ", el("a", { href: "report/jeonju.html" }, "데이터 보고서"))));
 }
 function kpi(label, value, unit, sub) {
   return el("div", { class: "kpi" }, el("div", { class: "label" }, label), el("div", { class: "value num" }, value, unit ? el("small", {}, unit) : null), el("div", { class: "sub" }, sub));
 }
 
-// ---------- 3. 동네 찾기 ----------
-function renderNear() {
-  const box = $("#s-near");
+// ---------- 3. 지도 먼저(디자인 후보 D) ----------
+// 목록·시트의 아바타 배경: 상징색을 옅게
+const tint = sp => `color-mix(in srgb, ${signatureColor(sp, S.species_info[sp])} 16%, var(--surface))`;
+const tile = (k, v, unit) => el("div", { class: "tile" }, el("div", { class: "k" }, k), el("div", { class: "v" }, v, el("small", {}, unit)));
+function setMapStatus(text) { const s = $("#mapStatus"); if (!s) return; s.textContent = text || ""; s.hidden = !text; }
+
+function renderMap() {
+  const box = $("#s-map");
+  const params = new URLSearchParams(location.hash.split("?")[1] || "");
   if (!box.dataset.ready) {
     box.dataset.ready = "1";
-    const input = el("input", { id: "addr", type: "search", list: "placeList", placeholder: "동·도로·주소 (예: 효자동 백제대로, 명륜1길 10)", autocomplete: "off", "aria-label": "동네 주소" });
+    const input = el("input", { id: "addr", type: "search", list: "placeList", placeholder: "동·도로·주소로 찾기", autocomplete: "off", "aria-label": "동네 주소" });
     const list = el("datalist", { id: "placeList" });
-    input.addEventListener("input", () => {
-      list.replaceChildren(...searchPlaces(PLACES, input.value).map(p => el("option", { value: p.name }, `${PLACE_KIND[p.kind] || p.kind} · ${nf(p.count)}그루`)));
-    });
-    const form = el("form", { class: "addr-form", onsubmit: async e => { e.preventDefault(); await findByText(input.value); } },
-      el("label", { class: "field grow" }, input), list,
-      el("button", { type: "submit", class: "btn" }, "찾기"),
-      el("button", { type: "button", class: "btn ghost", onclick: findByGPS }, "내 위치"));
-    const radius = el("div", { class: "seg", role: "group", "aria-label": "반경" }, ...[200, 300, 500].map(r => el("button", { type: "button", "aria-pressed": String(r === state.near.radius), onclick: () => { state.near.radius = r; for (const b of radius.children) b.setAttribute("aria-pressed", String(Number(b.dataset.r) === r)); if (state.near.center) runNear(); }, "data-r": r }, `${r}m`)));
-    box.replaceChildren(el("div", { class: "page-inner" },
-      el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "3단계 · 우리동네 가로수"), el("h1", {}, "내가 사는 곳 근처의 나무")), weatherChip()),
-      el("p", { class: "small" }, "동 이름, 도로 이름, 번지까지 넣을 수 있어요. 번지·건물은 OpenStreetMap에서 찾습니다."),
-      form, el("div", { class: "row between" }, el("div", { id: "nearLabel", class: "small" }), radius),
-      el("div", { id: "nearResults" })));
-    const q = new URLSearchParams(location.hash.split("?")[1] || "").get("q");
+    input.addEventListener("input", () => list.replaceChildren(...searchPlaces(PLACES, input.value).map(p => el("option", { value: p.name }, `${PLACE_KIND[p.kind] || p.kind} · ${nf(p.count)}그루`))));
+    const radiusChip = el("button", { type: "button", class: "radius-chip", title: "반경 바꾸기 (200·300·500m)", onclick: () => {
+      const steps = [200, 300, 500];
+      state.near.radius = steps[(steps.indexOf(state.near.radius) + 1) % steps.length];
+      radiusChip.textContent = `${state.near.radius}m`;
+      if (state.near.center) runNear();
+    } }, `${state.near.radius}m`);
+    const form = el("form", { onsubmit: async e => { e.preventDefault(); input.blur(); await findByText(input.value); } },
+      el("label", { class: "bar" }, svg(SEARCH_SVG), el("span", { class: "sr-only" }, "동·도로·주소로 찾기"), input, radiusChip), list);
+    const locateBtn = el("button", { type: "button", class: "sq-btn", "aria-label": "내 위치로", onclick: findByGPS }, svg(LOCATE_SVG));
+    state.near.ui = { form, locateBtn };
+    box.replaceChildren(
+      el("div", { class: "bigmap", id: "bigMap", role: "region", "aria-label": "가로수 지도" }),
+      el("div", { class: "map-top" }, el("div", { class: "map-search", id: "mapSearch" }, form, locateBtn), el("div", { class: "legend-chips", id: "legend" })),
+      el("div", { class: "map-status", id: "mapStatus", hidden: true }),
+      el("div", { class: "sheet-d empty", id: "mapSheet" }, el("span", { class: "handle" }), el("div", { class: "head" }, el("h2", {}, "어디의 가로수를 볼까요?")),
+        el("p", { class: "caption" }, "검색창에 동·도로·주소를 넣거나 ⌖ 를 눌러 내 위치 주변을 보세요.")));
+    ensureBigMap();
+    const q = params.get("q");
     if (q) { input.value = q; findByText(q); }
-    else if (state.my.length) {
-      // 내 나무가 있으면 그 주변부터 보여 준다
-      const t = state.my[0];
-      state.near.center = { lon: t.lon, lat: t.lat }; state.near.label = `${t.name} 주변`;
-      runNear();
-    }
+    else if (params.get("loc")) findByGPS();
+    else if (state.near.center) runNear();
+    else if (state.my.length) { const t = state.my[0]; state.near.center = { lon: t.lon, lat: t.lat }; state.near.label = `${t.name} 주변`; runNear(); }
+    return;
   }
+  const q = params.get("q");
+  if (q) { $("#addr").value = q; findByText(q); }
+  else if (params.get("loc")) findByGPS();
+  requestAnimationFrame(() => state.near.map?.resize());
+}
+async function ensureBigMap() {
+  if (state.near.map || state.near.mapLoading) return state.near.map;
+  state.near.mapLoading = true;
+  try {
+    const c = state.near.center || { lon: JEONJU.lon, lat: JEONJU.lat };
+    const mm = await createMiniMap($("#bigMap"), { center: [c.lon, c.lat], zoom: state.near.center ? 17 : 13, token, zoomControl: false, onSelect: i => selectTree(Number(i)) });
+    state.near.map = mm;
+    if (state.near.results.length) paintResults();
+    return mm;
+  } catch (err) { setMapStatus(`지도를 불러오지 못했어요 (${err.message})`); return null; }
+  finally { state.near.mapLoading = false; }
 }
 async function findByText(q) {
   q = (q || "").trim();
@@ -433,70 +467,125 @@ async function findByText(q) {
   // 동·도로 이름만이면 색인으로, 숫자(번지)나 모르는 말이 섞이면 지오코딩
   const exact = local && words.every(w => local.name.includes(w));
   if (exact) {
-    state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name}(${PLACE_KIND[local.kind] || local.kind} 중심) 주변`;
+    state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name}(${PLACE_KIND[local.kind] || local.kind} 중심)`;
     return runNear();
   }
-  $("#nearLabel").textContent = "주소를 찾는 중…";
+  setMapStatus("주소를 찾는 중…");
   const hits = await geocode(q);
   const hit = hits.find(h => insideJeonju(h.lon, h.lat));
-  if (hit) {
-    state.near.center = { lon: hit.lon, lat: hit.lat }; state.near.label = `${hit.name} 주변`;
-    return runNear();
-  }
-  if (local) {
-    state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name} 주변 (주소는 못 찾아 가까운 ${PLACE_KIND[local.kind] || local.kind}으로)`;
-    return runNear();
-  }
-  $("#nearLabel").textContent = "";
+  if (hit) { state.near.center = { lon: hit.lon, lat: hit.lat }; state.near.label = hit.name; return runNear(); }
+  if (local) { state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name} (주소는 못 찾아 가까운 ${PLACE_KIND[local.kind] || local.kind}으로)`; return runNear(); }
+  setMapStatus("");
   toast("찾지 못했어요. 동 이름이나 도로 이름으로 다시 넣어 보세요.", true);
 }
 async function findByGPS() {
+  setMapStatus("내 위치를 찾는 중…");
   try {
     const pos = await locate();
-    if (!insideJeonju(pos.lon, pos.lat)) { toast("지금 위치가 전주 밖이에요. 주소로 찾아 주세요.", true); return; }
-    state.near.center = pos; state.near.label = `내 위치 주변(오차 ±${Math.round(pos.acc)}m)`;
+    if (!insideJeonju(pos.lon, pos.lat)) { setMapStatus(""); toast("지금 위치가 전주 밖이에요. 주소로 찾아 주세요.", true); $("#addr")?.focus(); return; }
+    state.near.center = pos; state.near.label = `내 위치(±${Math.round(pos.acc)}m)`;
     runNear();
-  } catch (e) { toast(e.message, true); }
+  } catch (e) { setMapStatus(""); toast(e.message, true); $("#addr")?.focus(); }
 }
 function runNear() {
   const { center, radius } = state.near;
   state.near.results = nearestTrees(T, center.lon, center.lat, { radius, limit: 40 });
   state.near.picked = null;
-  $("#nearLabel").textContent = `${state.near.label} · 반경 ${radius}m 안 ${nf(state.near.results.length)}그루${state.near.results.length === 40 ? "(가까운 40그루만)" : ""}`;
-  renderStreet();
+  setMapStatus("");
+  backToList(false);
+  paintResults();
+  renderSheetList();
 }
-function renderStreet() {
-  const out = $("#nearResults");
+function paintResults() {
+  const mm = state.near.map;
+  if (!mm) return;
+  const { center, radius, results } = state.near;
+  mm.setCenter(center, radius);
+  mm.setTrees(results.map(({ i }) => { const sp = T.species[T.sp[i]]; return { i, lon: T.lon[i], lat: T.lat[i], label: sp, color: signatureColor(sp, S.species_info[sp]) }; }));
+  mm.setSelected(null);
+  const h = $("#bigMap")?.clientHeight || 600;
+  mm.fit([center, ...results.map(({ i }) => ({ lon: T.lon[i], lat: T.lat[i] }))], { top: 130, bottom: Math.round(h * 0.5), left: 36, right: 36 });
+  const counts = new Map();
+  for (const { i } of results) { const sp = T.species[T.sp[i]]; counts.set(sp, (counts.get(sp) || 0) + 1); }
+  $("#legend")?.replaceChildren(...[...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+    .map(([sp, n]) => el("span", {}, el("i", { style: `background:${signatureColor(sp, S.species_info[sp])}` }), `${sp} ${n}`)));
+}
+function renderSheetList() {
+  const sheet = $("#mapSheet");
   const res = state.near.results;
-  if (!res.length) { out.replaceChildren(el("p", { class: "empty" }, "이 반경 안에는 등록된 가로수가 없어요. 반경을 넓히거나 다른 곳을 찾아 보세요.")); return; }
   const mine = new Set(state.my.map(t => t.id));
-  const strip = el("div", { class: "street", role: "list" }, ...res.map(({ i, d }) => {
-    const r = treeRecord(i);
-    const size = Math.round(120 + Math.min(1, (r.dbh || 10) / 50) * 120);
-    const item = el("button", { type: "button", class: "tree-slot", role: "listitem", "aria-pressed": "false", "data-i": i, onclick: () => pickNear(i, item) },
-      svg(treeSVG({ species: r.species, info: r.info, dbh: r.dbh || 10, form: FORM, season, style: "real", seed: hashSeed(r.id), size, label: `${r.species}, ${Math.round(d)}m` })),
-      el("span", { class: "slot-label" }, el("b", {}, r.species), el("span", { class: "num" }, `${Math.round(d)}m`), mine.has(r.id) ? el("span", { class: "tag" }, "내 나무") : null));
-    return item;
-  }));
-  const mapBox = el("div", { class: "minimap", id: "nearMap", role: "region", "aria-label": "근처 가로수 지도" });
-  out.replaceChildren(mapBox,
-    el("p", { class: "small" }, "주황 점이 기준 위치, 초록 점이 가로수예요. 지도나 아래 그림에서 나무를 누르면 자세히 보고 친구를 맺을 수 있어요."),
-    el("div", { class: "street-wrap" }, el("div", { class: "street-sky" }), strip, el("div", { class: "street-ground" })),
-    el("p", { class: "small" }, "가까운 순서로 늘어놓았어요. 모양은 흉고로 추정한 그림입니다."),
-    el("div", { id: "nearCard" }));
-  // 위치 지도: 기준 위치와 근처 나무를 그대로 찍는다
-  state.near.map?.remove();
-  state.near.map = null;
-  const { center } = state.near;
-  createMiniMap(mapBox, { center: [center.lon, center.lat], zoom: 17, token, onSelect: i => pickNear(Number(i)) }).then(mm => {
-    if (!document.body.contains(mapBox)) { mm.remove(); return; }
-    state.near.map = mm;
-    mm.setCenter(center);
-    mm.setTrees(res.map(({ i }) => ({ i, lon: T.lon[i], lat: T.lat[i], label: T.species[T.sp[i]] })));
-    mm.fit([center, ...res.map(({ i }) => ({ lon: T.lon[i], lat: T.lat[i] }))], 36);
-    if (state.near.picked !== null) { const r = treeRecord(state.near.picked); mm.setSelected({ lon: r.lon, lat: r.lat }); }
-  }).catch(err => { mapBox.replaceChildren(el("p", { class: "empty" }, `지도를 불러오지 못했어요 (${err.message})`)); });
+  sheet.classList.toggle("empty", !res.length);
+  if (!res.length) {
+    sheet.replaceChildren(el("span", { class: "handle" }), el("div", { class: "head" }, el("h2", {}, "반경 안에 가로수가 없어요")),
+      el("p", { class: "caption" }, `${state.near.label} · 반경을 ${state.near.radius}m에서 넓히거나 다른 곳을 찾아 보세요.`));
+    return;
+  }
+  sheet.replaceChildren(el("span", { class: "handle" }),
+    el("div", { class: "head" }, el("h2", {}, `근처 가로수 ${nf(res.length)}그루`), el("span", { class: "sub" }, "가까운 순")),
+    el("p", { class: "caption" }, `${state.near.label} · 반경 ${state.near.radius}m${res.length === 40 ? " · 가까운 40그루만" : ""}`),
+    el("div", { class: "tree-rows" }, ...res.map(({ i, d }) => {
+      const r = treeRecord(i), my = mine.has(r.id) ? myTree(r.id) : null;
+      return el("button", { type: "button", class: "row-tree", "data-i": i, "aria-pressed": "false", onclick: () => selectTree(i) },
+        el("span", { class: "av", style: `background:${tint(r.species)}` }, svg(treeSVG({ species: r.species, info: r.info, dbh: r.dbh || 15, form: FORM, season, style: "character", seed: hashSeed(r.id), size: 66, label: r.species }))),
+        el("span", { class: "txt" }, el("b", {}, my ? `${my.name} · ${r.species}` : r.species), el("span", {}, `${r.road}${r.dbh ? ` · 지름 ${nf(r.dbh)}cm` : ""}${my ? " · 내 나무" : ""}`)),
+        el("span", { class: "dist" }, `${Math.round(d)}m`), svg(CHEV_SVG));
+    })),
+    el("p", { class: "caption" }, "지도의 점을 눌러도 돼요"));
+  sheet.scrollTop = 0;
 }
+function backToList(rerender = true) {
+  state.near.picked = null;
+  state.near.map?.setSelected(null);
+  const ui = state.near.ui;
+  if (ui) $("#mapSearch")?.replaceChildren(ui.form, ui.locateBtn);
+  if (rerender) renderSheetList();
+}
+// 나무 선택(디자인 후보 D 시트): 지도에 강조 + 아래 시트에 카드
+function selectTree(i) {
+  const r = treeRecord(i);
+  const mine = myTree(r.id);
+  state.near.picked = i;
+  const d = state.near.center ? distanceM(state.near.center.lon, state.near.center.lat, r.lon, r.lat) : null;
+  const color = signatureColor(r.species, r.info);
+  state.near.map?.setSelected({ lon: r.lon, lat: r.lat, label: d !== null ? `여기서 ${Math.round(d)}m` : (mine?.name || r.species), color }, "sheet");
+  $("#mapSearch")?.replaceChildren(el("button", { type: "button", class: "sq-btn ink", "aria-label": "목록으로", onclick: () => backToList() }, svg(BACK_SVG)),
+    el("span", { class: "map-pill" }, `${state.near.label} · ${state.near.radius}m 안 ${nf(state.near.results.length)}그루`));
+  for (const b of document.querySelectorAll(".row-tree")) b.setAttribute("aria-pressed", String(Number(b.dataset.i) === i));
+  const sheet = $("#mapSheet");
+  sheet.classList.remove("empty");
+  const seq = r.seq[1] !== null ? `${kg(r.seq[0])}~${kg(r.seq[2])}` : "-";
+  const photoOr3d = mine
+    ? el("a", { class: "sq-btn", "aria-label": "실제 사진과 캐릭터", href: `#photo/${encodeURIComponent(r.id)}` }, svg(CAM_SVG))
+    : view3dIconButton(r);
+  sheet.replaceChildren(el("span", { class: "handle" }),
+    el("div", { class: "detail-head" },
+      el("span", { class: "av", style: `background:${tint(r.species)}` }, svg(treeSVG({ species: r.species, info: r.info, dbh: r.dbh || 15, form: FORM, season, style: "character", mood: mine ? treeMood(mine, postsOf(r.id)) : "happy", seed: hashSeed(r.id), size: 96, label: r.species }))),
+      el("div", { style: "flex:1 1 auto;min-width:0" }, el("div", { class: "name" }, mine ? mine.name : r.species),
+        el("div", { class: "meta2" }, `${mine ? r.species + " · " : ""}${r.road}${r.dong ? " · " + r.dong : ""} · 관리번호 ${r.id}`)),
+      d !== null ? el("span", { class: "dist" }, `${Math.round(d)}m`) : null),
+    el("div", { class: "tiles" }, tile("줄기 지름", r.dbh ? nf(r.dbh) : "-", "cm"), tile("높이(추정)", r.heightM ? `약 ${nf(r.heightM)}` : "-", "m"), tile("한 해 CO₂", seq, "kg")),
+    el("div", { class: "note-box" }, svg(INFO_SVG), el("span", {}, "현장에서 같은 나무인지 보려면 줄기의 관리번호 표찰과 도로 이름을 함께 확인하세요. 수치는 공공데이터로 추정한 값(검증 전)이에요.")),
+    el("div", { class: "action-row" },
+      mine ? el("a", { class: "btn big", href: `#tree/${encodeURIComponent(r.id)}` }, "내 나무 보기") : el("button", { type: "button", class: "btn big", onclick: () => befriend(r) }, "친구 맺기 · 보호자 되기"),
+      el("a", { class: "sq-btn", "aria-label": "카카오맵 길찾기", href: `https://map.kakao.com/link/to/${encodeURIComponent(`${mine?.name || r.species} 가로수 ${r.id}`)},${r.lat},${r.lon}`, target: "_blank", rel: "noopener" }, svg(NAV_SVG)),
+      photoOr3d),
+    el("details", {}, el("summary", {}, "자세한 식별 정보 · 지도 주소 · 다른 지도"), identRows(r), mapLinks(r, mine?.name)));
+  sheet.scrollTop = 0;
+}
+function view3dIconButton(r) {
+  const btn = el("button", { type: "button", class: "sq-btn", "aria-label": "3D 모형 · AR" }, svg(CAM_SVG));
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      const { openTreeViewer } = await import("./tree3d.js");
+      const { jenkins_group, alt_group, growth_class, mature_height_class } = r.info;
+      openTreeViewer({ tree: { id: r.id, species: r.species, info: r.info, model: { jenkins_group, alt_group, growth_class, mature_height_class, dbh: r.dbh, block: r.block } }, P, form: FORM, token });
+    } catch (e) { console.error(e); toast("3D를 열지 못했어요. 네트워크를 확인해 주세요.", true); }
+    finally { btn.disabled = false; }
+  });
+  return btn;
+}
+
 // 실물 확인용 식별 정보
 function identRows(r, extra = []) {
   // 지도 위치의 실제 주소는 OSM에서 한 번 받아 채운다(좌표 기준이라 원본 구간 글자보다 정확)
@@ -531,31 +620,6 @@ function mapLinks(r, name) {
     el("a", { href: `https://map.kakao.com/link/to/${label},${r.lat},${r.lon}`, target: "_blank", rel: "noopener" }, "카카오맵 길찾기"),
     el("a", { href: `https://www.google.com/maps?q=${r.lat},${r.lon}`, target: "_blank", rel: "noopener" }, "구글 지도"),
     el("a", { href: `map.html#tree-${encodeURIComponent(r.id)}` }, "전체 지도(연구용)"));
-}
-function pickNear(i, item = null) {
-  item = item || document.querySelector(`.tree-slot[data-i="${i}"]`);
-  for (const b of document.querySelectorAll(".tree-slot")) b.setAttribute("aria-pressed", "false");
-  item?.setAttribute("aria-pressed", "true");
-  item?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-  const r = treeRecord(i);
-  const mine = myTree(r.id);
-  state.near.picked = i;
-  state.near.map?.setSelected({ lon: r.lon, lat: r.lat }, true);
-  const dist = state.near.center ? distanceM(state.near.center.lon, state.near.center.lat, r.lon, r.lat) : null;
-  const card = $("#nearCard");
-  card.replaceChildren(el("div", { class: "card tree-card" },
-    el("div", { class: "tree-card-head" }, figure(mine || r, { size: 120, caption: mine ? mine.name : "캐릭터" }),
-      el("div", {}, el("h2", {}, mine ? `${mine.name} (${r.species})` : r.species), el("div", { class: "id" }, `관리번호 ${r.id}${dist !== null ? ` · 기준 위치에서 ${Math.round(dist)}m` : ""}`),
-        el("p", { class: "small" }, mine ? "이미 내 나무예요." : "친구가 되면 이 캐릭터가 내 나무가 돼요."))),
-    identRows(r, [
-      el("dt", {}, "모양(추정)"), el("dd", {}, r.dbh ? `높이 약 ${nf(r.heightM)}m` : "-"),
-      el("dt", {}, "한 해 CO₂ 흡수"), el("dd", { class: "num" }, r.seq[1] !== null ? `${kg(r.seq[0])}~${kg(r.seq[2])} kg (추정)` : "계산 안 됨")]),
-    mapLinks(r, mine?.name),
-    el("p", { class: "story" }, `저는 ${r.road}에 서 있는 ${josa(r.species, "이에요", "예요")}. ${r.dbh ? `줄기 지름은 ${nf(r.dbh)}cm쯤이에요.` : ""} ${r.block ? "제 흉고는 아직 아무도 직접 재지 않은 대표값이에요." : ""}`),
-    el("div", { class: "row" },
-      mine ? el("a", { class: "btn", href: `#tree/${encodeURIComponent(r.id)}` }, "내 나무 보기") : el("button", { type: "button", class: "btn", onclick: () => befriend(r) }, "친구 맺기 · 보호자 되기"),
-      view3dButton(r))));
-  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 function view3dButton(r) {
   const btn = el("button", { type: "button", class: "btn ghost" }, "3D · AR");
@@ -623,7 +687,7 @@ async function renderSNS() {
       el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "4단계 · 나무 SNS"), el("h1", {}, "내 나무")), weatherChip()),
       el("div", { class: "empty-state" }, svg(treeSVG({ species: sample.species, info: S.species_info[sample.species], dbh: sample.median_dbh, form: FORM, season, mood: "sad", size: 150 })),
         el("p", {}, "아직 친구가 된 나무가 없어요. 우리 동네 가로수를 찾아 첫 친구를 맺어 보세요."),
-        el("a", { class: "btn big", href: "#near" }, "우리동네 나무 찾기"))));
+        el("a", { class: "btn big", href: "#map" }, "우리동네 나무 찾기"))));
     return;
   }
   const today = new Date();
@@ -639,7 +703,7 @@ async function renderSNS() {
   const stories = el("div", { class: "my-trees" }, ...state.my.map(t => {
     const mood = treeMood(t, postsOf(t.id));
     return el("a", { class: "my-tree", href: `#tree/${encodeURIComponent(t.id)}` }, figure(t, { size: 120, mood }), el("b", {}, t.name), el("span", { class: "sub" }, `${t.species} · ${MOOD_KO[mood]}`));
-  }), el("a", { class: "my-tree add", href: "#near" }, el("span", { class: "add-box" }, "+"), el("b", {}, "친구 추가")));
+  }), el("a", { class: "my-tree add", href: "#map" }, el("span", { class: "add-box" }, "+"), el("b", {}, "친구 추가")));
   const feed = el("div", { class: "feed" }, ...(state.posts.length ? state.posts.map(postCard) : [el("p", { class: "empty" }, "아직 기록이 없어요. 나무를 눌러 돌봄이나 생활 실천을 기록해 보세요.")]));
   box.replaceChildren(el("div", { class: "page-inner" },
     el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "4단계 · 나무 SNS"), el("h1", {}, "내 나무")), weatherChip()),
@@ -675,7 +739,7 @@ async function renderTree(id) {
     if (i < 0) { box.replaceChildren(el("div", { class: "page-inner" }, el("p", { class: "empty" }, "나무를 찾을 수 없어요."))); return; }
     const r = treeRecord(i);
     box.replaceChildren(el("div", { class: "page-inner" }, el("div", { class: "card tree-card" }, el("div", { class: "tree-card-head" }, avatar(r, { size: 72 }), el("div", {}, el("h2", {}, r.species), el("div", { class: "id" }, r.road))),
-      el("div", { class: "row" }, el("button", { type: "button", class: "btn", onclick: () => befriend(r) }, "친구 맺기 · 보호자 되기"), el("a", { class: "btn ghost", href: "#near" }, "동네 찾기")))));
+      el("div", { class: "row" }, el("button", { type: "button", class: "btn", onclick: () => befriend(r) }, "친구 맺기 · 보호자 되기"), el("a", { class: "btn ghost", href: "#map" }, "동네 찾기")))));
     return;
   }
   const posts = postsOf(id);
@@ -829,12 +893,12 @@ async function renderPhoto(id) {
   };
   renderReal();
   const charPane = el("div", { class: "pane char sway" }, svg(treeSVG({ species: t.species, info: t.info, dbh: t.dbh || 15, form: FORM, season, style: "character", mood, seed: hashSeed(t.id), size: 220, label: t.name })),
-    el("div", { class: "pane-label" }, `${t.name} 캐릭터 · ${SEASON_KO[season]} · ${MOOD_KO[mood]}`));
+    el("div", { class: "pane-label" }, `${t.name} 캐릭터 · ${MOOD_KO[mood]}`));
   const thumbs = el("div", { class: "thumbs" }, ...photos.map(p => el("button", { type: "button", class: "thumb", "aria-pressed": String(p === current), "data-pid": p.pid,
     onclick: () => { current = p; renderReal(); for (const b of thumbs.children) b.setAttribute("aria-pressed", String(Number(b.dataset.pid) === p.pid)); } },
     el("img", { src: URL.createObjectURL(p.photo), alt: "" }), el("span", {}, new Date(p.t).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })))));
   box.replaceChildren(el("div", { class: "page-inner" },
-    el("p", { class: "small" }, "왼쪽은 보호자가 찍은 실제 나무, 오른쪽은 같은 나무의 캐릭터예요. 캐릭터는 계절과 오늘 기분에 따라 바뀌어요."),
+    el("p", { class: "small" }, "왼쪽은 보호자가 찍은 실제 나무, 오른쪽은 같은 나무의 캐릭터예요. 캐릭터는 수종 상징색으로 그리고, 오늘 기분에 따라 표정이 바뀌어요."),
     el("div", { class: "compare" }, realPane, charPane),
     photos.length > 1 ? thumbs : null,
     el("div", { class: "actions" },

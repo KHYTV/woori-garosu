@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;650&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="home.css">
+<link rel="stylesheet" href="design.css">
 </head>
 <body class="app intro-mode">
 <header class="topbar" id="topbar">
@@ -24,7 +25,7 @@
     <div class="intro-inner"><h1 class="intro-title">우리동네<br>가로수</h1><p class="intro-lede">불러오는 중…</p></div>
   </section>
   <section id="s-city" class="screen" hidden aria-label="전주 가로수 현황"></section>
-  <section id="s-near" class="screen" hidden aria-label="우리동네 가로수 찾기"></section>
+  <section id="s-map" class="screen map-screen" hidden aria-label="지도에서 가로수 찾기"></section>
   <section id="s-sns" class="screen" hidden aria-label="내 나무"></section>
   <section id="s-tree" class="screen" hidden aria-label="나무 프로필"></section>
   <section id="s-chat" class="screen" hidden aria-label="나무와 대화"></section>
@@ -34,10 +35,9 @@
 </main>
 
 <nav class="tabbar" aria-label="화면">
-  <a href="#sns" data-screen="sns" aria-current="false"><span class="ico" aria-hidden="true">🌳</span>내 나무</a>
-  <a href="#near" data-screen="near" aria-current="false"><span class="ico" aria-hidden="true">📍</span>동네 찾기</a>
-  <a href="#city" data-screen="city" aria-current="false"><span class="ico" aria-hidden="true">🏙️</span>전주 현황</a>
-  <a href="map.html" data-screen="map" aria-current="false"><span class="ico" aria-hidden="true">🗺️</span>지도·연구</a>
+  <a href="#map" data-screen="map" aria-current="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>지도</a>
+  <a href="#sns" data-screen="sns" aria-current="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="9" r="6"/><path d="M12 15v6"/></svg>내 나무</a>
+  <a href="#city" data-screen="city" aria-current="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6"/></svg>전주 현황</a>
 </nav>
 <div id="toast" role="status" hidden></div>
 
