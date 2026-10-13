@@ -62,19 +62,30 @@ export async function geocode(q) {
   }
 }
 
-// 좌표 → OSM 주소(도로명·법정동·지번). 나무 카드를 열 때 한 번만 부른다. 실패하면 null
-export async function reverseGeocode(lon, lat) {
-  const wait = 1100 - (Date.now() - lastGeocode);
-  if (wait > 0) await new Promise(r => setTimeout(r, wait));
-  lastGeocode = Date.now();
-  try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=ko&lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`, { headers: { Accept: "application/json" } });
-    if (!r.ok) return null;
-    const a = (await r.json()).address || {};
-    const dong = a.quarter || a.village || a.neighbourhood || null, hjd = a.suburb || null;
-    return { road: a.road || null, dong, hjd, number: a.house_number || null, gu: a.borough || a.city_district || null,
-      text: [a.borough || a.city_district, dong, a.road, a.house_number].filter(Boolean).join(" ") || null };
-  } catch { return null; }
+// 좌표 → OSM 주소(도로명·법정동·지번). 나무 카드를 열 때 부른다. 같은 좌표는 한 번만 묻고(기기 캐시), 실패하면 한 번 더 시도한다
+const REV_KEY = "wg-revgeo-v1";
+function revCache() { try { return JSON.parse(sessionStorage.getItem(REV_KEY)) || {}; } catch { return {}; } }
+export async function reverseGeocode(lon, lat, { retry = 1 } = {}) {
+  const key = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+  const cache = revCache();
+  if (cache[key]) return cache[key];
+  for (let attempt = 0; attempt <= retry; attempt++) {
+    const wait = 1100 - (Date.now() - lastGeocode);
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    lastGeocode = Date.now();
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=ko&lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`, { headers: { Accept: "application/json" } });
+      if (r.status === 429) { await new Promise(res => setTimeout(res, 2000)); continue; }
+      if (!r.ok) return null;
+      const a = (await r.json()).address || {};
+      const dong = a.quarter || a.village || a.neighbourhood || null, hjd = a.suburb || null;
+      const out = { road: a.road || null, dong, hjd, number: a.house_number || null, gu: a.borough || a.city_district || null,
+        text: [a.borough || a.city_district, dong, a.road, a.house_number].filter(Boolean).join(" ") || null };
+      try { sessionStorage.setItem(REV_KEY, JSON.stringify({ ...revCache(), [key]: out })); } catch { /* 캐시 없이 진행 */ }
+      return out;
+    } catch { /* 네트워크 오류: 다시 시도 */ }
+  }
+  return null;
 }
 
 export function locate() {

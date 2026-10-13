@@ -500,12 +500,18 @@ function renderStreet() {
 function identRows(r, extra = []) {
   // 지도 위치의 실제 주소는 OSM에서 한 번 받아 채운다(좌표 기준이라 원본 구간 글자보다 정확)
   const addr = el("dd", { class: "addr" }, "지도에서 주소 확인 중…");
-  reverseGeocode(r.lon, r.lat).then(a => {
-    addr.replaceChildren(a?.text ? el("span", {}, a.text, el("small", { class: "sub" }, " · OpenStreetMap 기준")) : el("span", { class: "sub" }, "지도 주소를 받지 못했어요"));
-    if (a?.road && !r.road.includes(a.road) && !a.road.includes(r.road)) {
+  const lookup = () => reverseGeocode(r.lon, r.lat).then(a => {
+    if (!a?.text) {
+      addr.replaceChildren(el("span", { class: "sub" }, "지도 주소를 받지 못했어요(인터넷 연결 확인) "),
+        el("button", { type: "button", class: "btn ghost small", onclick: () => { addr.textContent = "다시 확인 중…"; lookup(); } }, "다시 확인"));
+      return;
+    }
+    addr.replaceChildren(el("span", {}, a.text, el("small", { class: "sub" }, " · OpenStreetMap 기준")));
+    if (a.road && !r.road.includes(a.road) && !a.road.includes(r.road)) {
       addr.append(el("div", { class: "sub warn" }, `원본 도로명(${r.road})과 지도 도로명(${a.road})이 달라요. 교차로 근처이거나 원본 오류일 수 있어요.`));
     }
   });
+  lookup();
   return el("dl", { class: "meta ident" },
     el("dt", {}, "관리번호"), el("dd", { class: "num" }, `${r.id} (산림청 시군구별 번호)`),
     el("dt", {}, "지도 주소"), addr,
