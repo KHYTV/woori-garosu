@@ -15,6 +15,7 @@ import * as cloud from "./cloud.js";
 import { renderProfileScreen } from "./profile.js";
 import { initFriends, attachFriendsMap, syncFriends, focusFriend } from "./friends.js";
 import * as reg from "./register.js";
+import { photoField } from "./camera.js";
 
 const $ = sel => document.querySelector(sel);
 const nf = (v, d = 0) => Number(v).toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -889,6 +890,8 @@ function openActivity(t, kind, presetId = null) {
     el("span", { class: "act-icon" }, a.icon), el("span", { class: "act-label" }, a.label), el("span", { class: "act-sub" }, `+${a.points}점${a.kg ? ` · −${massText(a.kg)}/${a.per}` : a.kg === null ? " · 점수만" : ""}`))));
   const btn = null;
   const formBox = el("div", { class: "act-form" });
+  // 사진: 앱 안 카메라로 바로 찍거나 앨범에서 고른다(활동을 바꿔도 고른 사진은 남는다)
+  const photo = photoField({ label: "사진", compress: f => compressImage(f), toast, hint: "나무가 잘 보이게 맞추고 가운데 버튼을 눌러요." });
   const renderForm = () => {
     for (const b of list.children) b.setAttribute("aria-pressed", String(b.dataset.id === picked?.id));
     if (!picked) { formBox.replaceChildren(); return; }
@@ -896,21 +899,19 @@ function openActivity(t, kind, presetId = null) {
       picked.hint ? el("p", { class: "hint" }, picked.hint) : null,
       picked.basis ? el("p", { class: "hint" }, `환산 근거: ${picked.basis}`) : null,
       picked.needs === "circ" ? el("div", { class: "row" }, el("input", { type: "number", name: "circ", min: "5", max: "700", step: "0.5", inputmode: "decimal", required: true, placeholder: "둘레 cm", "aria-label": "흉고둘레(cm)" }), el("span", {}, "cm (땅에서 1.2m 높이)")) : null,
-      el("label", { class: "file" }, el("span", {}, picked.needs === "photo" ? "사진 (필수)" : "사진 (선택)"), el("input", { type: "file", name: "photo", accept: "image/*", capture: "environment", required: picked.needs === "photo" })),
+      (photo.node.querySelector(".photo-label").textContent = `사진 ${picked.needs === "photo" ? "(필수)" : "(선택)"}`, photo.node),
       el("textarea", { name: "text", maxlength: "200", placeholder: "한마디 (선택)" })].filter(Boolean));
   };
   renderForm();
   dialog(kind === "care" ? `${t.name} 돌봄 기록` : "생활 실천 기록", el("div", { class: "dialog-body" }, list, formBox), { confirm: "기록하기", onConfirm: async form => {
     if (!picked) { toast("활동을 골라 주세요.", true); return false; }
-    const file = form.photo?.files?.[0];
-    let photo = null;
-    if (file) { try { photo = await compressImage(file); } catch (e) { toast(e.message, true); return false; } }
+    if (picked.needs === "photo" && !photo.blob) { toast("사진을 찍거나 골라 주세요.", true); return false; }
     const circ = form.circ ? Number(form.circ.value) || null : null;
-    const post = await saveActivity(t, kind, picked, { photo, circ, text: (form.text.value || "").trim() });
+    const post = await saveActivity(t, kind, picked, { photo: photo.blob, circ, text: (form.text.value || "").trim() });
     if (!post) return false;
     toast(`기록했어요 · +${picked.points}점${picked.kg ? ` · −${massText(picked.kg)}` : ""}`);
     // 사진을 올리면 실제 나무와 캐릭터를 나란히 보여 준다
-    if (photo) go(`#photo/${encodeURIComponent(t.id)}`);
+    if (photo.blob) go(`#photo/${encodeURIComponent(t.id)}`);
     else if (location.hash.startsWith("#chat/")) renderChat(t.id);
     else renderTree(t.id);
   } });

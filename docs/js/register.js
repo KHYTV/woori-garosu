@@ -5,6 +5,7 @@ import { treeSVG, hashSeed, signatureColor } from "./characters.js";
 import { distanceM, nearestTrees, reverseGeocode } from "./geo.js";
 import { circumferenceToDbh } from "./carbon.js";
 import { db, compressImage } from "./db.js";
+import { takePhoto } from "./camera.js";
 import { userTrees, userRecord, newUserTreeId, insidePolygon, guessDong, isUserTreeId, SOURCE_KO } from "./usertrees.js";
 import * as cloud from "./cloud.js";
 
@@ -295,10 +296,18 @@ function photoPicker(label, { capture = false, onPick }) {
   });
   return el("label", { class: `btn ${capture ? "" : "ghost"} big user-file` }, label, input);
 }
+// 앱 안 카메라로 바로 찍기(못 열면 기기 카메라·앨범으로 넘어간다)
+function cameraButton(label, { onPick, title = "사진 찍기", hint = "", cls = "btn big" }) {
+  return el("button", { type: "button", class: cls, onclick: async () => {
+    const f = await takePhoto({ title, hint });
+    if (!f) return;
+    try { onPick(await compressImage(f)); } catch (e) { C.toast(e.message, true); }
+  } }, label);
+}
 function stepPhoto() {
   const body = [
     el("div", { class: "user-photo-row" },
-      photoPicker("📷 사진 찍기", { capture: true, onPick: b => { reg.photo = b; renderStep(); } }),
+      cameraButton("📷 바로 찍기", { title: "나무 사진 찍기", hint: "줄기와 잎이 함께 보이게 맞추고 가운데 버튼을 눌러요.", onPick: b => { reg.photo = b; renderStep(); } }),
       photoPicker("🖼️ 앨범에서", { onPick: b => { reg.photo = b; renderStep(); } })),
     reg.photo ? el("img", { class: "user-photo", src: URL.createObjectURL(reg.photo), alt: "등록할 나무 사진" }) : el("div", { class: "user-photo empty" }, "아직 사진이 없어요"),
     el("p", { class: "caption left" }, "줄기와 잎이 함께 보이게 찍어요. 사진은 이 기기에만 저장되고 서버에는 올라가지 않아요."),
@@ -357,7 +366,7 @@ function aiBox(list, choose) {
     }
     renderStep();
   };
-  const leafPick = photoPicker(reg.aiPhoto ? "잎 사진 다시 고르기" : "잎 사진 따로 고르기", { onPick: b => { reg.aiPhoto = b; run(b); } });
+  const leafPick = photoPicker(reg.aiPhoto ? "🖼️ 잎 사진 다시 고르기" : "🖼️ 잎 사진 앨범에서", { onPick: b => { reg.aiPhoto = b; run(b); } });
   leafPick.classList.remove("big"); leafPick.classList.add("small");
   const st = reg.aiState;
   if (st?.busy) {
@@ -377,7 +386,7 @@ function aiBox(list, choose) {
   } else {
     box.append(el("p", { class: "small" }, `${reg.photo ? "찍은 사진" : "잎 사진"}으로 전주 가로수 ${list.length}종 중 비슷한 3종을 골라 줘요. 처음 한 번 AI 모델(약 90MB, 와이파이 권장)을 받아요. 사진은 기기 밖으로 나가지 않아요.`));
   }
-  box.append(el("div", { class: "row" }, leafPick));
+  box.append(el("div", { class: "row" }, cameraButton("📷 잎 바로 찍기", { cls: "btn small", title: "잎 사진 찍기", hint: "잎 한두 장이 화면을 채우게 가까이 찍어요.", onPick: b => { reg.aiPhoto = b; run(b); } }), leafPick));
   return box;
 }
 
