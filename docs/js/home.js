@@ -466,6 +466,8 @@ function renderMap() {
   if (params.get("tree")) requestAnimationFrame(() => { state.near.map?.resize(); focusFriend(params.get("tree")); });
   else if (q) { $("#addr").value = q; findByText(q); }
   else if (params.get("loc")) findByGPS();
+  // 다른 화면에서 친구를 맺고 돌아오면 열려 있던 카드를 지금 상태로 다시 그린다
+  else if (state.near.picked !== null && state.near.picked !== undefined) selectTree(state.near.picked);
   requestAnimationFrame(() => state.near.map?.resize());
 }
 async function ensureBigMap() {

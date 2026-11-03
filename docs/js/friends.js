@@ -125,7 +125,7 @@ function renderBar(z = mm?.map.getZoom() ?? 0, n = 0) {
   } else if (mm && n) {
     area = el("span", { class: "friends-area-note", id: "friendsAreaNote" }, `화면 안 ${n.toLocaleString("ko-KR")}그루${n >= AREA_LIMIT ? "+" : ""} · 점을 눌러 친구 맺기`);
   }
-  bar.replaceChildren(chip, area);
+  bar.replaceChildren(...[chip, area].filter(Boolean));
 }
 
 /** 내 나무 표시를 state.my에 맞춘다(지도 화면에 들어올 때마다). */
