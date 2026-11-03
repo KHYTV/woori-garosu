@@ -1,0 +1,29 @@
+/* 지도 위 친구 나무(docs/js/friends.js). design.css 위에 얹는다 */
+:root { --friend: #E5487A; }
+@media (prefers-color-scheme: dark) { :root { --friend: #FF7AA2; } }
+
+/* 지도 위쪽: 내 나무 칩 + 화면 안 가로수 안내 */
+.friends-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.friends-chip, .friends-area-btn, .friends-area-note {
+  display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 12px; border-radius: 999px;
+  font: inherit; font-size: 13px; font-weight: 700; background: var(--surface); color: var(--ink);
+  box-shadow: 0 2px 8px rgba(21, 32, 26, 0.14); border: 0; white-space: nowrap; }
+.friends-chip { cursor: pointer; color: var(--friend); border: 1.5px solid var(--friend); }
+.friends-chip svg { width: 16px; height: 16px; fill: currentColor; }
+.friends-area-btn { cursor: pointer; color: var(--accent); }
+.friends-area-note { font-weight: 600; color: var(--ink-2); font-size: 12px; height: 30px; }
+
+/* 친구 표시: 점 위 하트 + 내가 지은 이름 */
+.friends-pin { position: relative; width: 28px; height: 28px; padding: 0; border: 0; background: none; cursor: pointer; z-index: 2; }
+.friends-heart { position: absolute; inset: 0; border-radius: 50%; background: var(--friend); border: 2.5px solid #fff;
+  box-shadow: 0 0 0 2.5px var(--c, var(--friend)), 0 3px 8px rgba(0, 0, 0, 0.3); display: grid; place-items: center; box-sizing: border-box; }
+.friends-heart svg { width: 15px; height: 15px; fill: #fff; }
+.friends-name { position: absolute; left: calc(100% + 4px); top: 50%; transform: translateY(-50%); display: none;
+  background: var(--surface); color: var(--ink); font-size: 12.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
+  border: 1.5px solid var(--friend); white-space: nowrap; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18); pointer-events: none; }
+.friends-names .friends-name { display: block; }
+.friends-names .friends-pin.is-selected .friends-name { display: none; }
+
+/* 내 나무 목록(아래 시트) */
+.friends-head-btns { display: inline-flex; gap: 6px; }
+.friends-mini-heart svg { width: 14px; height: 14px; fill: var(--friend); vertical-align: -1px; margin-right: 4px; }

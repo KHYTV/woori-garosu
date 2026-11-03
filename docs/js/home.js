@@ -10,6 +10,7 @@ import { estimateForm } from "./treeform.js";
 import { circumferenceToDbh } from "./carbon.js";
 import * as cloud from "./cloud.js";
 import { renderProfileScreen } from "./profile.js";
+import { initFriends, attachFriendsMap, syncFriends, focusFriend } from "./friends.js";
 
 const $ = sel => document.querySelector(sel);
 const nf = (v, d = 0) => Number(v).toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -441,16 +442,20 @@ function renderMap() {
       el("div", { class: "map-status", id: "mapStatus", hidden: true }),
       el("div", { class: "sheet-d empty", id: "mapSheet" }, el("span", { class: "handle" }), el("div", { class: "head" }, el("h2", {}, "어디의 가로수를 볼까요?")),
         el("p", { class: "caption" }, "검색창에 동·도로·주소를 넣거나 ⌖ 를 눌러 내 위치 주변을 보세요.")));
+    initFriends({ state, T, S, FORM, season, selectTree, runNear, backToList, toast });
     ensureBigMap();
     const q = params.get("q");
-    if (q) { input.value = q; findByText(q); }
+    if (params.get("tree") && focusFriend(params.get("tree"))) { /* #map?tree=<id>: 그 나무를 가운데 두고 카드 */ }
+    else if (q) { input.value = q; findByText(q); }
     else if (params.get("loc")) findByGPS();
     else if (state.near.center) runNear();
     else if (state.my.length) { const t = state.my[0]; state.near.center = { lon: t.lon, lat: t.lat }; state.near.label = `${t.name} 주변`; runNear(); }
     return;
   }
+  syncFriends();
   const q = params.get("q");
-  if (q) { $("#addr").value = q; findByText(q); }
+  if (params.get("tree")) requestAnimationFrame(() => { state.near.map?.resize(); focusFriend(params.get("tree")); });
+  else if (q) { $("#addr").value = q; findByText(q); }
   else if (params.get("loc")) findByGPS();
   requestAnimationFrame(() => state.near.map?.resize());
 }
@@ -461,6 +466,7 @@ async function ensureBigMap() {
     const c = state.near.center || { lon: JEONJU.lon, lat: JEONJU.lat };
     const mm = await createMiniMap($("#bigMap"), { center: [c.lon, c.lat], zoom: state.near.center ? 17 : 13, token, zoomControl: false, onSelect: i => selectTree(Number(i)) });
     state.near.map = mm;
+    attachFriendsMap(mm);
     if (state.near.results.length) paintResults();
     return mm;
   } catch (err) { setMapStatus(`지도를 불러오지 못했어요 (${err.message})`); return null; }
@@ -552,11 +558,12 @@ function selectTree(i) {
   const r = treeRecord(i);
   const mine = myTree(r.id);
   state.near.picked = i;
-  const d = state.near.center ? distanceM(state.near.center.lon, state.near.center.lat, r.lon, r.lat) : null;
+  const inResults = state.near.results.some(x => x.i === i);
+  const d = state.near.center && inResults && !(state.near.center.lon === r.lon && state.near.center.lat === r.lat) ? distanceM(state.near.center.lon, state.near.center.lat, r.lon, r.lat) : null;
   const color = signatureColor(r.species, r.info);
   state.near.map?.setSelected({ lon: r.lon, lat: r.lat, label: d !== null ? `여기서 ${Math.round(d)}m` : (mine?.name || r.species), color }, "sheet");
   $("#mapSearch")?.replaceChildren(el("button", { type: "button", class: "sq-btn ink", "aria-label": "목록으로", onclick: () => backToList() }, svg(BACK_SVG)),
-    el("span", { class: "map-pill" }, `${state.near.label} · ${state.near.radius}m 안 ${nf(state.near.results.length)}그루`));
+    el("span", { class: "map-pill" }, inResults ? `${state.near.label} · ${state.near.radius}m 안 ${nf(state.near.results.length)}그루` : "지도에서 고른 나무"));
   for (const b of document.querySelectorAll(".row-tree")) b.setAttribute("aria-pressed", String(Number(b.dataset.i) === i));
   const sheet = $("#mapSheet");
   sheet.classList.remove("empty");
@@ -787,6 +794,7 @@ async function renderTree(id) {
       view3dButton(t)),
     el("section", { class: "card where" }, el("div", { class: "k" }, "이 나무가 서 있는 곳"),
       el("div", { class: "minimap small", id: "treeMap", role: "region", "aria-label": `${t.name} 위치 지도` }),
+      el("div", { class: "row" }, el("a", { class: "btn small", id: "viewOnMap", href: `#map?tree=${encodeURIComponent(id)}` }, "지도에서 보기")),
       identRows(t), mapLinks(t, t.name),
       el("p", { class: "limit" }, "공공데이터의 좌표와 관리번호예요. 현장에서 같은 나무인지 확인하려면 관리번호 표찰(있는 경우)과 도로·구간을 함께 보세요.")),
     coGuardianBlock(t),
