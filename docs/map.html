@@ -61,7 +61,7 @@
       <p class="lede">시민이 동네 가로수를 공동보호자로 맡아 기록하는 시민참여형 도시숲 플랫폼의 첫 데모입니다. 전북대학교 데이터커뮤니케이션연구소가 연구용으로 만들고 있습니다.</p>
       <h2>이 데모로 할 수 있는 것</h2>
       <ul>
-        <li>전주 가로수 37,952그루의 위치·수종·흉고를 지도에서 봅니다.</li>
+        <li>전주 가로수 37,988그루(산림청)와 OpenStreetMap 나무 271그루의 위치·수종·흉고를 지도에서 봅니다.</li>
         <li>나무마다 1년에 흡수하는 CO₂를 세 가지 방식(단일값, 범위, 범위와 한계)으로 봅니다. 연구에서 비교하는 표시 방식입니다.</li>
         <li>보호자가 되어 관찰을 기록하고, 흉고둘레를 재서 넣으면 추정 범위가 얼마나 좁아지는지 바로 봅니다.</li>
       </ul>
@@ -69,12 +69,13 @@
       <p>보호자 등록과 관찰 기록은 이 기기의 브라우저에만 저장되고 어디로도 전송되지 않습니다. '내 위치'는 지도를 옮길 때만 쓰고 저장하지 않습니다.</p>
       <h2>데이터와 방법</h2>
       <ul>
-        <li>가로수: 산림청 「도시숲가로수관리 가로수 현황」 2025-08-26판(공공데이터포털, 이용 제한 없음). 원본은 전북 지역 시군구명이 비어 있어 전주시 경계 안의 좌표로 전주 나무를 골랐습니다.</li>
+        <li>가로수: 산림청 「도시숲가로수관리 가로수 현황」 2025-08-26판(공공데이터포털, 이용 제한 없음). 원본은 전북 지역 시군구명이 비어 있어 전주시 경계 안(경계 밖 300m 여유 포함)의 좌표로 전주 나무를 골랐습니다.</li>
+        <li>보충: OpenStreetMap 나무 점(natural=tree, 2026-11-03 기준 345그루 중 산림청 나무와 5m 안에서 겹치는 74그루를 뺀 271그루, ODbL). 수종이 거의 없고 흉고가 없어 '흉고 미상'으로 표시하고 탄소는 계산하지 않습니다.</li>
         <li>탄소: Jenkins 등(2003) 수종군 상대생장식, i-Tree 방식의 도시 보정과 생장 규칙(Nowak 2021)을 쓰고, 계수 불확실성을 2,000번 추출해 80% 범위를 냅니다. 일부 계수는 검증 전 가정값이라 수치는 방법 시연용입니다.</li>
         <li>자세한 결과: <a href="report/jeonju.html">전주 분석 보고서</a> · <a href="report/sample.html">합성 샘플 보고서</a></li>
       </ul>
       <h2>출처 표시</h2>
-      <p class="small">배경지도 © <a href="https://openfreemap.org" rel="noopener">OpenFreeMap</a>, © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> contributors · 전주시 경계 © OpenStreetMap contributors (ODbL) · 지도 라이브러리 <a href="https://maplibre.org" rel="noopener">MapLibre</a> · 가로수 원자료 산림청</p>
+      <p class="small">배경지도 © <a href="https://openfreemap.org" rel="noopener">OpenFreeMap</a>, © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> contributors · 전주시 경계 © OpenStreetMap contributors (ODbL) · 지도 라이브러리 <a href="https://maplibre.org" rel="noopener">MapLibre</a> · 가로수 원자료 산림청(공공데이터포털, 이용 제한 없음) · 보충 나무 © OpenStreetMap contributors (ODbL)</p>
     </div>
   </section>
 </main>

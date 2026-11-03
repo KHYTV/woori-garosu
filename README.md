@@ -3,7 +3,7 @@
 시민이 동네 가로수를 공동보호자로 맡아 기록하는 시민참여형 도시숲 플랫폼의 연구용 데모와 데이터 파이프라인.
 전북대학교 데이터커뮤니케이션연구소.
 
-- **웹 데모**: https://khytv.github.io/woori-garosu/ (전주 가로수 37,952그루, 서버 없는 정적 사이트)
+- **웹 데모**: https://khytv.github.io/woori-garosu/ (전주 가로수 37,988그루 + OpenStreetMap 나무 271그루, 서버 없는 정적 사이트)
 - **분석 보고서**: https://khytv.github.io/woori-garosu/report/jeonju.html
 
 > 탄소 수치는 일부 계수가 검증 전 가정값이라 방법 시연용이다. 보고서나 정책 근거로 인용하지 않는다.
@@ -151,6 +151,8 @@ python -m venv .venv
 
 원본은 전북 지역 행의 시군구명이 비어 있어 이름으로 전주를 찾을 수 없다.
 `extract_region`이 시군구명이 빈 행 중 전주 행정경계(OpenStreetMap, `config/boundaries/jeonju_osm.geojson`) 안의 좌표를 고른다.
+경계선과 산림청 좌표가 조금 어긋나 경계 바로 밖(최대 약 170m)에 찍힌 전주 나무 36그루(콩쥐팥쥐로·번영로·춘향로·구이로 등, 구간 주소가 전주 동이고 관리번호가 전주 번호대)가 있어
+경계 밖 300m까지 받아들인다(`--buffer-m`, 기본 300). 시군구명이 빈 행 중 전주 경계 3km 안에 드는 것은 이 36행뿐이라 이웃 시군 나무는 섞이지 않는다.
 
 ```bash
 .venv/Scripts/python -m pipeline.extract_region --input data/raw/forest_service_street_trees_20250826.csv
@@ -161,10 +163,48 @@ python -m venv .venv
 
 전주 원본에서 확인한 것(2026-09-30 실행):
 
-- 전국 1,051,259행 중 시군구명이 빈 행 67,503행(전북). 전주 경계 안 37,972행 → 2016년 전주시 발표 57,950그루의 66%
+- 전국 1,051,259행 중 시군구명이 빈 행 67,503행(전북). 전주 경계 안 37,972행 + 경계 밖 300m 안 36행 = 38,008행(지도 37,988그루, 중복 20행 제외) → 2016년 전주시 발표 57,950그루의 66%
+- 재추출로 확인(2026-11-04): 좌표계 오표기(5186↔5179·5174)·X/Y 뒤바뀜으로 다시 풀어도 전주로 들어오는 행은 없고, 좌표 결측 행(좌표계 빈 24,184행 포함)은 모두 다른 시군구라 원본 안에서 더 찾을 전주 나무는 없다.
+  전주 관리번호는 61422–115931인데 그 사이 16,558개 번호가 비어 있고(특히 63104–75350, 107563–110986) 빈 번호대의 행은 원본 어디에도 없다 → 원본에 올라오지 않은 전주 나무가 있다는 단서
+- 전주시 노선별 가로수 현황(공공데이터포털 15080618, 2026-03-17, 완산구 공원녹지과 148개 노선, 좌표 없음)은 완산구 23,728그루로 지도의 완산구 23,483그루와 비슷하다.
+  그래서 2016년 발표치와의 차이(약 2만 그루)는 주로 덕진구 쪽이다(지도 덕진구 14,609그루, 산림청 14,520). 노선 단위로는 지도에 한 그루도 없는 완산구 노선이 34개(1,614그루, 거마평로·신봉로·송정로·삼천천변1길·효천중앙로 등)다
 - 흉고 끝자리 0·5 비율 72.4%(고르게 분포하면 약 20%)
 - 같은 도로구간·수종에서 같은 흉고가 10그루 이상 반복되는 나무 89% → 구간 대표값 일괄 입력 의심. 탄소 계산에서 흉고 오차를 15%로 잡는다(`dbh_error_cv_block`)
 - 가로내녹지유형·도로변녹지유형·기후대·입지 4개 항목이 전부 '기타'
+
+#### 보충 자료: OpenStreetMap 나무(`pipeline/osm_trees.py`)
+
+OSM에 점으로 그려진 나무(`natural=tree`, 2026-11-03 기준 전주 345그루)를 `data/raw/jeonju_osm_trees.csv`로 받아 두고(ODbL 1.0, © OpenStreetMap contributors),
+`export_web`이 산림청 나무와 5m 안에서 겹치는 것(같은 수종이거나 OSM 수종이 미상이면 같은 나무로 봄, 74그루)을 빼고 271그루를 더한다.
+수종은 4그루만 있고(나머지 '기타'), 흉고는 없어 **등급 C(탄소 계산 제외, '흉고 미상' 표시)** 이며 관리번호·도로 정보도 없다(`trees.json`의 `rd`가 null).
+한옥마을(풍남동·노송동)과 혁신동에 몰려 있다. 줄로 그린 가로수(`natural=tree_row`, 245개)는 그루 수·위치가 없어 쓰지 않는다.
+`trees.json`의 `src`(`srcs` = forest/osm 번호)로 출처를 구분하며, OSM 행은 ODbL을 따른다.
+
+```bash
+.venv/Scripts/python -m pipeline.osm_trees           # Overpass에서 다시 받기(키 없음)
+.venv/Scripts/python -m pipeline.export_web
+.venv/Scripts/python -m pipeline.coverage --markdown  # 공백 진단: 행정동·전북대 캠퍼스·생활권 300m·완산구 노선 대조
+```
+
+검토했지만 쓰지 않은 자료: 전주시 노선별 가로수 현황(좌표 없음, 대조에만 사용 `data/raw/jeonju_city_street_trees_wansan_20260317.csv`),
+행정안전부 보호수정보(localdata 파일 서버가 자동 내려받기를 막음, 보호수는 가로수가 아님), 산림청 보호수 지정현황(시도 집계표),
+전북대 캠퍼스 수목 공개 자료(찾지 못함, OSM에도 캠퍼스 안 나무 점은 0그루).
+
+#### 공백 진단(`pipeline/coverage.py`, 2026-11-04)
+
+| 구역(반경 300m) | 반영 전 | 반영 후 |
+|---|---:|---:|
+| 전북대학교(캠퍼스 중심) | 13 | 13 |
+| 한옥마을(경기전 앞) | 275 | 360 |
+| 전주역 | 147 | 155 |
+| 서부신시가지(도청) | 633 | 633 |
+| 전주시청 | 222 | 227 |
+| 에코시티(세병공원) | 0 | 0 |
+| 혁신도시(국민연금공단) | 0 | 0 |
+| 전북대 캠퍼스 경계 안(130.9ha) | 108 | 108 |
+| 행정동 효자2동 / 혁신동 / 호성동 | 0 / 114 / 127 | 0 / 204 / 127 |
+
+전북대 캠퍼스(OSM way 35424732, `config/boundaries/jbnu_campus_osm.geojson`) 안 108그루는 모두 캠퍼스를 지나는 시 도로(창포길 85·조경단로 23)의 가로수이고 교내 길·건물 주변 나무는 0그루다. 산림청 자료는 시가 관리하는 도로변 가로수만 다루므로 캠퍼스 안·공원·신규 개발지(에코시티·혁신도시 중심 300m 0그루, 효자2동 0그루)는 원본 자체가 비어 있다. 이 공백은 시민 직접 등록으로 채워야 한다.
 
 ## 구조
 
@@ -181,6 +221,9 @@ python -m venv .venv
 | `pipeline/aggregate.py` | 100 m 격자 배정(UTM-K) |
 | `pipeline/export_itree.py` | i-Tree Eco v6 가져오기용 CSV |
 | `pipeline/report.py`, `web/report_template.html` | 결과 보고서 |
+| `pipeline/osm_trees.py` | OpenStreetMap 나무 점 받기·수종 매칭·산림청 나무와 중복 제거(보충 자료) |
+| `pipeline/coverage.py` | 공백 진단: 행정동·전북대 캠퍼스·주요 생활권 반경 안 그루 수, 전주시 노선별 현황 대조 |
+| `config/boundaries/jbnu_campus_osm.geojson` | 전북대학교 전주캠퍼스 경계(OpenStreetMap way 35424732, ODbL) — 공백 진단용 |
 | `pipeline/export_web.py` | 웹 데모용 정적 데이터(`docs/data`: 나무·요약·계수·장소 색인·활동 계수)와 보고서(`docs/report`) |
 | `config/activities.json` | SNS 활동 점수, 레벨, 생활 실천 감축 환산 계수(검증 전) |
 | `docs/` | 웹 데모(GitHub Pages). `index.html` 홈 앱, `map.html` 지도, `characters.html` 캐릭터 목록, `study/` 연구4 실험 |
@@ -225,6 +268,7 @@ CO2 = 지상부 × 도시보정 × (1 + 뿌리비) × 탄소비율 × 44/12
 
 ## 출처
 
-가로수 원자료 산림청(공공데이터포털) · 전주시 경계 © OpenStreetMap contributors (ODbL 1.0) ·
+가로수 원자료 산림청(공공데이터포털, 이용허락범위 제한 없음) · 보충 나무(natural=tree)·전주시 경계·전북대 캠퍼스 경계 © OpenStreetMap contributors (ODbL 1.0) ·
+전주시 노선별 가로수 현황(공공데이터포털, 이용허락범위 제한 없음, 대조용) ·
 배경지도 © OpenFreeMap, © OpenStreetMap contributors · 지도 라이브러리 MapLibre GL JS ·
 생장·보정 방법 Nowak (2021) *Understanding i-Tree*, GTR-NRS-200-2021

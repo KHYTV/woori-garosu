@@ -11,11 +11,13 @@
  "matched_by_name": 0,
  "inside_boundary": 37972,
  "inside_boundary_blank_sgg": 37972,
+ "buffer_m": 300,
+ "near_boundary_blank_sgg": 36,
  "inside_boundary_other_sgg": [],
  "blank_sgg_unlocatable": 0,
- "selected_rows": 37972,
+ "selected_rows": 38008,
  "input": "data/raw/forest_service_street_trees_20250826.csv",
- "boundary": "D:\\alcohol studies\\woori-garosu\\config\\boundaries\\jeonju_osm.geojson",
+ "boundary": "config/boundaries/jeonju_osm.geojson",
  "boundary_source": "OpenStreetMap relation 7619919 via Nominatim",
  "name": "전주"
 }
