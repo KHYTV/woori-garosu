@@ -102,3 +102,29 @@ export const api = {
     return rows?.[0] || null;
   },
 };
+
+// ---------- 시민 등록 나무 공유(선택, supabase/user_trees.sql) ----------
+// 표·함수가 서버에 없으면 available()이 false가 되어 화면은 조용히 기기 저장만 한다.
+// 읽기는 참여하지 않은 사람도 되게 공개 키만으로 부르고(user_trees_in_bbox 함수), 쓰기는 익명 계정으로 자기 행만.
+async function publicRpc(name, body) {
+  if (!cfg) return null;
+  const r = await fetch(`${cfg.url}/rest/v1/rpc/${name}`, { method: "POST", headers: baseHeaders(), body: JSON.stringify(body) });
+  const data = await r.json().catch(() => null);
+  if (!r.ok) { const err = new Error(data?.message || `${name} ${r.status}`); err.status = r.status; err.code = data?.code; throw err; }
+  return data;
+}
+export const userTreesApi = {
+  // 전주 한가운데 아주 작은 범위로 한 번 불러 보고 함수가 있는지 본다
+  async available() {
+    if (!cfg) return false;
+    try { await publicRpc("user_trees_in_bbox", { w: 127.147, s: 35.823, e: 127.148, n: 35.824, max_rows: 1 }); return true; }
+    catch (err) { if (err.status !== 404 && !["PGRST202", "42883", "42P01"].includes(err.code)) console.warn("user_trees 확인 실패", err.message); return false; }
+  },
+  inBbox(w, s, e, n, maxRows = 500) { return publicRpc("user_trees_in_bbox", { w, s, e, n, max_rows: maxRows }); },
+  // 위치·수종·지름·동만 보낸다(사진·닉네임·시각은 보내지 않음). 같은 id면 고쳐 쓴다
+  share(t) {
+    return rest("user_trees", { method: "POST", body: { id: t.id, species: t.species || null, species_source: t.species_source || "unknown", dbh: t.dbh || null, lon: t.lon, lat: t.lat, dong: t.dong || null },
+      params: { on_conflict: "id" }, prefer: "resolution=merge-duplicates,return=minimal" });
+  },
+  unshare(id) { return rest("user_trees", { method: "DELETE", params: { id: eq(id) }, prefer: "return=minimal" }); },
+};

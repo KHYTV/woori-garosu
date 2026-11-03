@@ -66,6 +66,79 @@ GitHub Pages가 `main` 브랜치의 `docs/`를 그대로 배포한다.
 개발 중에는 `python tests/mock_supabase.py 8791`(가짜 서버: 익명 로그인·표 REST·트리거 규칙 흉내)을 띄우고
 `http://localhost:8790/?backend=http://localhost:8791&backendkey=test#sns`로 열면 서버 없이 전체 흐름을 볼 수 있다.
 
+#### 시민 직접 나무 등록 (`docs/js/register.js`, `docs/js/usertrees.js`, `docs/register.css`)
+
+원본(산림청 가로수 대장)에는 캠퍼스·공원 나무가 없다. 지도 화면의 **나무 등록** 버튼(또는 근처 목록 끝 '직접 등록하기')으로 시민이 직접 등록한다.
+
+1. 위치: GPS 현재 위치와 정확도(±m, 지도에 정확도 원). 파란 핀을 끌거나 지도를 눌러 줄기 자리로 옮긴다. GPS가 안 되면 지도를 눌러 정한다.
+   전주시 경계(`docs/data/boundary.geojson`) 밖이면 다음으로 못 간다. 4m 안에 대장 가로수, 3m 안에 다른 등록 나무가 있으면 그 나무를 먼저 보라고 안내한다.
+2. 사진: 찍기(`capture="environment"`) 또는 앨범. 기존 사진과 같은 `compressImage`(긴 변 1024px JPEG)로 줄여 기기에만 둔다.
+3. 수종: 캐릭터 그림이 있는 전주 수종 21종 + 'AI로 알아보기' + '모르겠어요'(기본값, 저장 시 '기타').
+4. 줄기 둘레(선택, 땅에서 1.2m) → 흉고 = 둘레/π → `carbon.js`로 한 해 CO₂ 범위(추정). 저장하면 바로 이름 짓기(친구 맺기)를 제안한다.
+
+- 저장: IndexedDB `wg-user-trees`(별도 DB라 `wg-sns` 판은 그대로). id는 `u-<시각 36진수>-<난수 4자리>`. 친구 맺기는 원본 나무와 똑같이 `wg-sns`의 `trees`에 들어가고,
+  `refreshMine`이 trees.json 색인이 없는 id를 `register.record()`로 채워 내 나무·프로필·대화·돌봄 기록·피드·온라인 동기화가 그대로 동작한다. 친구 맺은 뒤 '둘레 재기'를 기록하면 그 값으로 흉고를 다시 잡는다.
+  행정동은 400m 안 가장 가까운 대장 가로수의 동을 빌린다(어림).
+- 지도: 소스 `user-trees`, 레이어 `user-trees-ring`·`user-trees-core`·`user-trees-label`(속이 흰 고리 = 시민 등록·미검증, 원본은 꽉 찬 점), 등록 중 정확도 원 `user-reg-acc-*`.
+  근처 목록 맨 앞에 반경 안 등록 나무가 붙고, 카드에는 사진·수종(직접 고름/AI 추정/모름)·흉고·높이·한 해 CO₂(추정)·친구 맺기·등록 지우기가 있다.
+
+#### AI 잎 사진 수종 인식 (`docs/js/leafid.js`, `docs/data/leafid.json`, `pipeline/leafid.mjs`)
+
+- 'AI로 알아보기'를 누를 때만 transformers.js 4.3.1(jsdelivr)과 CLIP ViT-B/16 그림 인코더(`Xenova/clip-vit-base-patch16`, q8 약 88MB)를 불러온다. 처음 한 번 받고 브라우저 캐시에 남는다. 서버·키가 필요 없고 사진은 기기 밖으로 나가지 않는다.
+- 제로샷 분류: 수종마다 영어 문장 여러 개(잎·나무·가로수·꽃·열매·생김새)의 임베딩 평균을 미리 계산해 `leafid.json`(약 85KB)에 두므로 문장 모델은 받지 않는다.
+  후보는 전주 수종 21종(`summary.json` `species_info`, 기타 제외)이고, 전주 가로수 수종 비율을 사전확률로 약하게(세기 0.5) 섞는다. 나무가 아닌 사진(건물·사람·음식 등)이면 다시 찍으라고 한다.
+- 화면: 상위 3개와 상대 확신도(%)를 보여 주고, 사람이 눌러야 정해진다('AI 추정' 표시). 기본값은 끝까지 '모르겠어요'다.
+- 정확도(2026-11-04, Wikimedia Commons 자유 라이선스 사진 128장 = 11종 × 잎·나무, 후보 21종 중에서): 아래 표. 1순위가 맞는 건 절반쯤이라 위처럼 보수적으로 쓴다.
+  벚나무 잎·이팝나무 잎·회화나무·중국단풍이 특히 약하다. 수종 비율 사전확률은 시험 사진이 흔한 수종 위주라 실제보다 좋게 보일 수 있다(캠퍼스·공원 나무는 가로수 비율과 다르다).
+
+  | 그림 인코더(브라우저용 정밀도) | 크기 | 전체 top-1 / top-3 | 잎 70장 | 나무 58장 |
+  |---|---:|---:|---:|---:|
+  | **CLIP ViT-B/16 q8 + 수종 비율 0.5 (채택)** | 88MB | **52% / 77%** | 46% / 74% | 60% / 79% |
+  | CLIP ViT-B/16 q8, 수종 비율 없음 | 88MB | 45% / 68% | 36% / 61% | 57% / 76% |
+  | CLIP ViT-B/16 q8 + 수종 비율 1.0 | 88MB | 55% / 78% | 50% / 77% | 62% / 79% |
+  | CLIP ViT-B/16 q8 + 0.5 + 세 조각 평균 | 88MB | 54% / 77% | 47% / 73% | 62% / 81% |
+  | CLIP ViT-B/32 q8 + 0.5 | 89MB | 49% / 68% | 47% / 64% | 52% / 72% |
+  | MobileCLIP-S0 fp16 + 0.5 | 23MB | 40% / 68% | 36% / 63% | 45% / 74% |
+  | MobileCLIP-S0 q8 | 12MB | 1% / 8% (양자화로 망가짐) | | |
+
+  채택 설정의 수종별(맞힌 장 수 / 시험 장 수, top-1 · top-3). 주요 7종(은행·벚·느티·이팝·단풍·버즘·메타) 84장만 보면 top-1 60%, top-3 81%.
+
+  | 수종 | 잎 | 나무 |
+  |---|---|---|
+  | 은행나무 | 4/4 · 4/4 | 3/5 · 5/5 |
+  | 벚나무 | 1/4 · 1/4 | 5/5 · 5/5 |
+  | 느티나무 | 5/6 · 5/6 | 5/6 · 6/6 |
+  | 이팝나무 | 0/8 · 5/8 | 6/6 · 6/6 |
+  | 단풍나무 | 7/8 · 8/8 | 3/6 · 4/6 |
+  | 양버즘나무 | 2/8 · 6/8 | 4/6 · 5/6 |
+  | 메타세쿼이아 | 4/7 · 6/7 | 1/5 · 2/5 |
+  | 회화나무 | 2/7 · 5/7 | 0/5 · 2/5 |
+  | 중국단풍 | 1/8 · 2/8 | 0/3 · 0/3 |
+  | 히말라야시다 | 4/8 · 8/8 | 6/6 · 6/6 |
+  | 소나무 | 2/2 · 2/2 | 2/5 · 5/5 |
+
+  자주 헷갈린 쌍: 회화나무→아까시나무, 이팝나무 잎→팽나무·감나무, 중국단풍→감나무, 히말라야시다→소나무. 세 조각 평균은 이득(+2%p)보다 추론 시간(3배)이 커서 쓰지 않는다.
+  첫 로딩은 headless Chrome(데스크톱, 빠른 회선)에서 모델 받기 포함 약 10초, 사진 한 장 추론 3–4초였다. 휴대폰·모바일 데이터에서는 더 오래 걸린다.
+
+- 다시 만들기·평가: `npm i --prefix <작업 폴더> @huggingface/transformers@4.3.1` 후
+  `TRANSFORMERS_JS=<작업 폴더>/node_modules/@huggingface/transformers/dist/transformers.node.mjs node pipeline/leafid.mjs --model Xenova/clip-vit-base-patch16 --prior 0.5`.
+  `--eval <사진 폴더>`(`manifest.json`: `[{species, kind, file}]`)를 붙이면 top-1·top-3를 수종·잎/나무별로 잰다. `--no-write`는 `leafid.json`을 건드리지 않는다.
+- 선택: `docs/data/backend.json`에 `plantnet_key`(Pl@ntNet API 키, 대시보드에서 허용 도메인을 꼭 제한)를 넣으면 그 API를 먼저 쓰고, 실패하면 기기 AI로 돌아간다.
+  이때는 사진이 Pl@ntNet 서버로 가므로 화면 안내 문구('사진은 기기 밖으로 나가지 않아요')도 함께 바꿔야 한다. 기본은 키 없음.
+
+#### 등록 나무 온라인 공유(선택, `supabase/user_trees.sql`)
+
+- 온라인 참여 중이고 서버에 `user_trees`가 있을 때만 등록 마지막 단계에 '온라인 지도에 공유하기'(기본 꺼짐, 공개 범위 동의 문구)가 나온다.
+  켜면 좌표(약 1m로 반올림)·수종·수종 출처·흉고·행정동·등록 날짜만 올린다. 사진·닉네임·등록 시각·GPS 정확도는 올리지 않는다.
+- 쓰기와 표 직접 읽기는 RLS로 자기 행만. 공개 지도는 `user_trees_in_bbox()`(security definer, 등록자 id를 돌려주지 않음, 최대 1,000행)로 참여 전 사람도 읽는다.
+  하루 20그루 제한, `verified`(검증 표시)는 대시보드에서만 바꿀 수 있다. 다른 사람의 공유 나무와 친구를 맺으면 기기에 사본을 둔다.
+- 표·함수가 없으면 `cloud.userTreesApi.available()`이 false가 되어 공유 단추가 숨고 기기 저장만 한다(`sns_schema.sql`은 바뀌지 않는다).
+
+설정 순서(사람이 Supabase 대시보드에서):
+1. `sns_schema.sql`을 이미 실행한 같은 프로젝트의 **SQL Editor**에 `supabase/user_trees.sql` 내용을 붙여 넣고 실행한다(다시 실행해도 안전).
+2. **Database → Functions**에 `user_trees_in_bbox`, **Table Editor**에 `user_trees`(RLS 켜짐)가 보이면 끝. 앱은 다음 접속부터 자동으로 공유 단추를 보여 준다.
+3. 현장 확인을 마친 나무는 Table Editor에서 `verified`를 true로 바꾼다. 문제 있는 행(사유지·장난)은 대시보드에서 지운다.
+
 ### 지도 (`docs/map.html`, `docs/js/app.js`, 연구용)
 
 - 지도: MapLibre + OpenFreeMap 배경지도, 전주 가로수(확대 14 이하는 묶음 표시), 도로 이름 검색, 수종 필터, 내 위치
@@ -184,8 +257,9 @@ python -m venv .venv
 | `pipeline/export_web.py` | 웹 데모용 정적 데이터(`docs/data`: 나무·요약·계수·장소 색인·활동 계수)와 보고서(`docs/report`) |
 | `config/activities.json` | SNS 활동 점수, 레벨, 생활 실천 감축 환산 계수(검증 전) |
 | `docs/` | 웹 데모(GitHub Pages). `index.html` 홈 앱, `map.html` 지도, `characters.html` 캐릭터 목록, `study/` 연구4 실험 |
-| `docs/js/` | `home.js` 화면 흐름, `characters.js` 캐릭터, `daily.js` 일일 흡수, `geo.js` 동네 찾기, `weather.js` 날씨·돌봄 제안, `talk.js` 나무 대화, `db.js` 기기 저장, `carbon.js` 탄소, `map3d.js`·`tree3d.js` 3D |
-| `tests/` | 파이프라인 테스트(pytest), 브라우저 계산 대조(`web_parity.mjs`), 홈 모듈 검사(`web_home.mjs`: 캐릭터 2,112장·일일 흡수·색인·날씨 제안) |
+| `docs/js/` | `home.js` 화면 흐름, `characters.js` 캐릭터, `daily.js` 일일 흡수, `geo.js` 동네 찾기, `weather.js` 날씨·돌봄 제안, `talk.js` 나무 대화, `db.js` 기기 저장, `carbon.js` 탄소, `map3d.js`·`tree3d.js` 3D, `register.js`·`usertrees.js` 시민 직접 등록, `leafid.js` AI 잎 인식 |
+| `pipeline/leafid.mjs` | AI 잎 인식용 수종 문장 임베딩(`docs/data/leafid.json`) 만들기와 정확도 평가(Node, transformers.js) |
+| `tests/` | 파이프라인 테스트(pytest, `test_user_trees_sql.py` 포함), 브라우저 계산 대조(`web_parity.mjs`), 홈 모듈 검사(`web_home.mjs`: 캐릭터 2,112장·일일 흡수·색인·날씨 제안·등록 나무·leafid.json) |
 
 ## 출력 (`data/out/<입력 파일 이름>/`, 저장소에는 올리지 않음)
 
