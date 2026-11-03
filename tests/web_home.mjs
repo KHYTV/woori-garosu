@@ -5,6 +5,7 @@ import { treeSVG, archetype, MOODS, moodFor } from "../docs/js/characters.js";
 import { dailyWeight, uptakeBetween, cumulativeThisYear, yearProfile, seasonWindow } from "../docs/js/daily.js";
 import { searchPlaces, nearestTrees, distanceM } from "../docs/js/geo.js";
 import { careSuggestions } from "../docs/js/weather.js";
+import { treesInBounds, friendPoints, friendRows, distText } from "../docs/js/friends.js";
 
 const root = new URL("../", import.meta.url);
 const S = JSON.parse(readFileSync(new URL("docs/data/summary.json", root), "utf8"));
@@ -60,6 +61,17 @@ check(Math.abs(distanceM(127.1, 35.8, 127.1, 35.809) - 1000) < 15, "거리 계�
 const T = { id: ["a", "b", "c"], lon: [127.10, 127.101, 127.2], lat: [35.80, 35.80, 35.80] };
 const near = nearestTrees(T, 127.1, 35.8, { radius: 300 });
 check(near.length === 2 && near[0].i === 0, `반경 안 나무 ${near.length}그루, 가장 가까운 것 ${near[0]?.i}`);
+
+// 지도 위 친구 나무: 화면 안 가로수, 좌표 없는(또는 원본에 없는) 내 나무도 깨지지 않음
+const TB = { id: ["a", "b", "c", "d"], lon: [127.10, 127.101, 127.2, null], lat: [35.80, 35.80, 35.80, null] };
+const inView = treesInBounds(TB, [[127.099, 35.799], [127.102, 35.801]]);
+check(inView.length === 2 && inView.includes(0) && inView.includes(1), `화면 안 나무 ${inView.length}그루`);
+check(treesInBounds(TB, [[127.0, 35.7], [127.3, 35.9]], { limit: 1 }).length === 1, "화면 안 나무 상한");
+const my = [{ id: "a", name: "은행이", lon: 127.10, lat: 35.80 }, { id: "u-1", name: "시민", lon: 127.2, lat: 35.80 }, { id: "x", name: "좌표없음" }];
+check(friendPoints(my).length === 2, "좌표 있는 내 나무만 표시(원본에 없는 u- 나무 포함)");
+const fr = friendRows(my, { lon: 127.2, lat: 35.8 });
+check(fr[0].t.id === "u-1" && fr[0].d < 1 && fr[1].d > 8000, `내 나무 목록 거리순: ${fr.map(r => r.t.id).join(",")}`);
+check(friendRows(my, null)[0].t.id === "a" && distText(950) === "950m" && distText(9050) === "9.1km", "기준점 없음·거리 표기");
 
 // 날씨 제안
 const hot = careSuggestions({ weather: { flags: { heat: true }, today: { tmax: 35 }, past7Rain: 0 }, season: "summer", measured: false });
