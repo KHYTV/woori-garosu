@@ -9,6 +9,7 @@ import { greeting, proactive, reply, reaction, josa } from "./talk.js";
 import { estimateForm } from "./treeform.js";
 import { circumferenceToDbh } from "./carbon.js";
 import * as cloud from "./cloud.js";
+import { renderProfileScreen } from "./profile.js";
 
 const $ = sel => document.querySelector(sel);
 const nf = (v, d = 0) => Number(v).toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -135,7 +136,7 @@ function joinDialog() {
       try { await joinOnline(n, form.dong.value.trim()); }
       catch (err) { toast(`연결 실패: ${err.message}`, true); return false; }
       toast(`${n}님, 온라인으로 함께해요`);
-      renderSNS();
+      route();
     },
   });
 }
@@ -150,7 +151,7 @@ function onlineCard() {
       el("div", { class: "row" }, el("button", { type: "button", class: "btn small", onclick: joinDialog }, "참여하기")));
   }
   const box = el("section", { class: "card online" }, el("div", { class: "row between" }, el("div", { class: "k" }, `온라인 · ${state.profile.nickname}${state.profile.dong ? " · " + state.profile.dong : ""}`),
-    el("button", { type: "button", class: "btn ghost small", onclick: () => dialog("온라인을 끌까요?", el("p", { class: "dialog-body" }, "이 기기의 기록은 남고, 서버에 올린 기록도 지워지지 않아요. 다시 참여하면 새 익명 계정이 돼요."), { confirm: "끄기", onConfirm: async () => { await leaveOnline(); renderSNS(); } }) }, "끄기")),
+    el("button", { type: "button", class: "btn ghost small", onclick: () => dialog("온라인을 끌까요?", el("p", { class: "dialog-body" }, "이 기기의 기록은 남고, 서버에 올린 기록도 지워지지 않아요. 다시 참여하면 새 익명 계정이 돼요."), { confirm: "끄기", onConfirm: async () => { await leaveOnline(); route(); } }) }, "끄기")),
     el("div", { id: "rankBox" }, el("p", { class: "small" }, "동네 순위를 불러오는 중…")));
   loadRankings(box.querySelector("#rankBox"));
   return box;
@@ -190,8 +191,8 @@ function show(name) {
 }
 const setTitle = text => { $("#topbarTitle").textContent = text; };
 // 뒤로 가기: 앱 안에서 온 길이 있으면 그 길로, 처음 열었으면 상위 화면으로
-const TITLES = { city: "전주 현황", map: "지도", sns: "내 나무", tree: "나무", chat: "대화", group: "보호자 방", photo: "사진과 캐릭터", ar: "AR 보기" };
-const PARENT = { city: "#intro", map: "#intro", sns: "#city", tree: "#sns", chat: "#tree", group: "#tree", photo: "#tree", ar: "#photo" };
+const TITLES = { city: "전주 현황", map: "지도", sns: "내 나무", profile: "내 프로필", tree: "나무", chat: "대화", group: "보호자 방", photo: "사진과 캐릭터", ar: "AR 보기" };
+const PARENT = { city: "#intro", map: "#intro", sns: "#city", profile: "#intro", tree: "#sns", chat: "#tree", group: "#tree", photo: "#tree", ar: "#photo" };
 const navStack = [];
 function goBack() {
   const [name, arg] = (location.hash.slice(1) || "intro").split("/");
@@ -208,6 +209,7 @@ function route() {
   if (name === "city") renderCity();
   else if (name === "map" || name === "near") renderMap();
   else if (name === "sns") renderSNS();
+  else if (name === "profile") renderProfile();
   else if (name === "tree" && id) renderTree(id);
   else if (name === "chat" && id) renderChat(id);
   else if (name === "group" && id) renderGroup(id);
@@ -713,7 +715,7 @@ async function renderSNS() {
     const mood = treeMood(t, postsOf(t.id));
     return el("a", { class: "my-tree", href: `#tree/${encodeURIComponent(t.id)}` }, figure(t, { size: 120, mood }), el("b", {}, t.name), el("span", { class: "sub" }, `${t.species} · ${MOOD_KO[mood]}`));
   }), el("a", { class: "my-tree add", href: "#map" }, el("span", { class: "add-box" }, "+"), el("b", {}, "친구 추가")));
-  const feed = el("div", { class: "feed" }, ...(state.posts.length ? state.posts.map(postCard) : [el("p", { class: "empty" }, "아직 기록이 없어요. 나무를 눌러 돌봄이나 생활 실천을 기록해 보세요.")]));
+  const feed = el("div", { class: "feed" }, ...(state.posts.length ? state.posts.map(postCard) : [el("p", { class: "empty" }, "아직 기록이 없어요. 나무를 눌러 돌봄을 기록하거나, 내 프로필에서 생활 실천을 기록해 보세요.")]));
   box.replaceChildren(el("div", { class: "page-inner" },
     el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "4단계 · 나무 SNS"), el("h1", {}, "내 나무")), weatherChip()),
     stories,
@@ -722,8 +724,13 @@ async function renderSNS() {
       kpi("돌보는 동안 흡수", ...mass(totals.protected), `돌봄 뒤 ${ACT.protection.care_effect_days}일 기준`),
       kpi("내 생활 실천 감축", ...mass(totals.practice), "실천 기록 환산(추정)"),
       kpi("기여 점수", nf(totals.points), "점", lv.next ? `${lv.name} · 다음까지 ${lv.next}점` : lv.name)),
-    onlineCard(),
+    el("a", { class: "card link-card", href: "#profile" }, el("span", {}, el("b", {}, "생활 실천 · 동네 순위"), el("span", { class: "sub" }, " 내 프로필에서 기록하고 확인해요")), el("span", { class: "chev", "aria-hidden": "true" }, "›")),
     el("h2", {}, "기록"), feed));
+}
+// ---------- 내 프로필 (docs/js/profile.js) ----------
+async function renderProfile() {
+  await refreshMine();
+  await renderProfileScreen($("#s-profile"), { state, ACT, el, nf, mass, massText, kpi, levelOf, postCard, onlineCard, loadRankings, dialog, toast, avatar, saveActivity, cloudOn, rerender: renderProfile });
 }
 function postCard(p) {
   const t = myTree(p.treeId);
@@ -774,7 +781,7 @@ async function renderTree(id) {
     el("div", { class: "actions" },
       el("a", { class: "btn", href: `#chat/${encodeURIComponent(id)}` }, "💬 메시지"),
       el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care") }, "🌳 돌봄 기록"),
-      el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "practice") }, "🌱 생활 실천"),
+      el("a", { class: "btn ghost", href: `#profile?tree=${encodeURIComponent(id)}` }, "🌱 생활 실천"),
       el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care", "observe") }, "📷 사진 올리기"),
       el("a", { class: "btn ghost", href: `#photo/${encodeURIComponent(id)}` }, "🖼️ 사진·캐릭터·AR"),
       view3dButton(t)),
