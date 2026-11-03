@@ -219,10 +219,13 @@ function route() {
   show(name === "near" ? "map" : name);
 }
 const go = hash => { location.hash = hash; };
+// 산림청 외 보충 자료(OSM)는 도로 정보·흉고가 없다
+const NO_ROAD = "도로 정보 없음";
+const srcOf = i => (T.srcs && T.src ? T.srcs[T.src[i]] : "forest");
 function treeRecord(i) {
   const species = T.species[T.sp[i]], info = S.species_info[species];
   const annual = T.seq[1][i] ?? T.point_seq[i] ?? 0;
-  return { i, id: T.id[i], species, info, road: T.roads[T.rd[i]], dong: T.dong?.[i] != null ? T.dongs[T.dong[i]] : null,
+  return { i, id: T.id[i], src: srcOf(i), species, info, road: T.rd[i] != null ? T.roads[T.rd[i]] : NO_ROAD, dong: T.dong?.[i] != null ? T.dongs[T.dong[i]] : null,
     section: T.sec?.[i] != null ? T.sections[T.sec[i]] : null, dongEdge: Boolean(T.dong_edge?.[i]), grade: T.grades[T.grade[i]], dbh: T.dbh[i], block: Boolean(T.block[i]),
     seq: T.seq.map(a => a[i]), annualKg: annual, lon: T.lon[i], lat: T.lat[i], heightM: T.dbh[i] ? estimateForm(T.dbh[i], info, FORM).h : null };
 }
@@ -347,6 +350,7 @@ function renderIntro() {
 
 // ---------- 2. 전주 현황 ----------
 function renderCity() {
+  const osmCount = S.sources?.find(x => x.key === "osm")?.count || 0;
   const box = $("#s-city");
   clearInterval(tickTimer);
   const annualKg = S.totals.seq_t[1] * 1000, lo = S.totals.seq_t[0], hi = S.totals.seq_t[2];
@@ -389,7 +393,7 @@ function renderCity() {
     el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "2단계 · 전주 가로수 지금"), el("h1", {}, "오늘 전주 가로수가 들이마시는 CO₂")), weatherChip()),
     el("div", { class: "hero" }, live, liveSub),
     el("div", { class: "kpis tight" },
-      kpi("가로수", nf(S.quality.on_map), "그루", "산림청 2025-08-26판, 전주 경계 안"),
+      kpi("가로수", nf(S.quality.on_map), "그루", `산림청 2025-08-26판, 전주 경계 안${osmCount ? ` · 지도엔 OSM 나무 ${nf(osmCount)}그루(흉고 미상) 더` : ""}`),
       kpi("올해 누적 흡수", nf(yearKg / 1000, 0), "t", `1월 1일부터 오늘까지(추정)`),
       kpi("한 해 흡수", nf(S.totals.seq_t[1]), "t/년", `80% 범위 ${nf(lo)}–${nf(hi)} t`),
       kpi("CO₂ 저장량", nf(S.totals.storage_t[1]), "t", "줄기·가지·뿌리에 쌓인 양")),
@@ -398,7 +402,8 @@ function renderCity() {
     el("h2", {}, "수종별 캐릭터"), el("p", { class: "small" }, "전주 가로수의 수종을 캐릭터로 요약했어요. 크기는 수종의 흉고 중앙값을 따릅니다."),
     speciesRow,
     el("div", { class: "cta" }, el("a", { class: "btn big", href: "#map" }, "우리동네 가로수와 친구 맺기 →")),
-    el("p", { class: "notice" }, el("b", {}, "계수 검증 전 · 방법 시연용 "), "탄소 수치는 일부 가정값으로 계산한 추정 범위입니다. ", el("a", { href: "report/jeonju.html" }, "데이터 보고서"))));
+    el("p", { class: "notice" }, el("b", {}, "계수 검증 전 · 방법 시연용 "), "탄소 수치는 일부 가정값으로 계산한 추정 범위입니다. ", el("a", { href: "report/jeonju.html" }, "데이터 보고서")),
+    S.sources ? el("p", { class: "small" }, "출처: ", ...S.sources.filter(x => x.count).flatMap((x, k) => [k ? " · " : "", el("a", { href: x.url, target: "_blank", rel: "noopener" }, x.label), ` (${x.license}, ${nf(x.count)}그루)`])) : null));
 }
 function kpi(label, value, unit, sub) {
   return el("div", { class: "kpi" }, el("div", { class: "label" }, label), el("div", { class: "value num" }, value, unit ? el("small", {}, unit) : null), el("div", { class: "sub" }, sub));
@@ -527,7 +532,7 @@ function renderSheetList() {
       const r = treeRecord(i), my = mine.has(r.id) ? myTree(r.id) : null;
       return el("button", { type: "button", class: "row-tree", "data-i": i, "aria-pressed": "false", onclick: () => selectTree(i) },
         el("span", { class: "av", style: `background:${tint(r.species)}` }, svg(treeSVG({ species: r.species, info: r.info, dbh: r.dbh || 15, form: FORM, season, style: "character", seed: hashSeed(r.id), size: 66, label: r.species }))),
-        el("span", { class: "txt" }, el("b", {}, my ? `${my.name} · ${r.species}` : r.species), el("span", {}, `${r.road}${r.dbh ? ` · 지름 ${nf(r.dbh)}cm` : ""}${my ? " · 내 나무" : ""}`)),
+        el("span", { class: "txt" }, el("b", {}, my ? `${my.name} · ${r.species}` : r.species), el("span", {}, `${r.road !== NO_ROAD ? r.road : `OSM 나무${r.dong ? " · " + r.dong : ""}`}${r.dbh ? ` · 지름 ${nf(r.dbh)}cm` : " · 흉고 미상"}${my ? " · 내 나무" : ""}`)),
         el("span", { class: "dist" }, `${Math.round(d)}m`), svg(CHEV_SVG));
     })),
     el("p", { class: "caption" }, "지도의 점을 눌러도 돼요"));
@@ -553,7 +558,7 @@ function selectTree(i) {
   for (const b of document.querySelectorAll(".row-tree")) b.setAttribute("aria-pressed", String(Number(b.dataset.i) === i));
   const sheet = $("#mapSheet");
   sheet.classList.remove("empty");
-  const seq = r.seq[1] !== null ? `${kg(r.seq[0])}~${kg(r.seq[2])}` : "-";
+  const seq = r.seq[1] !== null ? `${kg(r.seq[0])}~${kg(r.seq[2])}` : r.dbh ? "-" : "미상";
   const photoOr3d = mine
     ? el("a", { class: "sq-btn", "aria-label": "실제 사진과 캐릭터", href: `#photo/${encodeURIComponent(r.id)}` }, svg(CAM_SVG))
     : view3dIconButton(r);
@@ -561,9 +566,9 @@ function selectTree(i) {
     el("div", { class: "detail-head" },
       el("span", { class: "av", style: `background:${tint(r.species)}` }, svg(treeSVG({ species: r.species, info: r.info, dbh: r.dbh || 15, form: FORM, season, style: "character", mood: mine ? treeMood(mine, postsOf(r.id)) : "happy", seed: hashSeed(r.id), size: 96, label: r.species }))),
       el("div", { style: "flex:1 1 auto;min-width:0" }, el("div", { class: "name" }, mine ? mine.name : r.species),
-        el("div", { class: "meta2" }, `${mine ? r.species + " · " : ""}${r.road}${r.dong ? " · " + r.dong : ""} · 관리번호 ${r.id}`)),
+        el("div", { class: "meta2" }, `${mine ? r.species + " · " : ""}${r.road}${r.dong ? " · " + r.dong : ""} · ${r.src === "osm" ? "OSM 나무" : "관리번호 " + r.id}`)),
       d !== null ? el("span", { class: "dist" }, `${Math.round(d)}m`) : null),
-    el("div", { class: "tiles" }, tile("줄기 지름", r.dbh ? nf(r.dbh) : "-", "cm"), tile("높이(추정)", r.heightM ? `약 ${nf(r.heightM)}` : "-", "m"), tile("한 해 CO₂", seq, "kg")),
+    el("div", { class: "tiles" }, tile("줄기 지름", r.dbh ? nf(r.dbh) : "미상", r.dbh ? "cm" : ""), tile("높이(추정)", r.heightM ? `약 ${nf(r.heightM)}` : "미상", r.heightM ? "m" : ""), tile("한 해 CO₂", seq, r.seq[1] !== null || r.dbh ? "kg" : "")),
     el("div", { class: "note-box" }, svg(INFO_SVG), el("span", {}, "현장에서 같은 나무인지 보려면 줄기의 관리번호 표찰과 도로 이름을 함께 확인하세요. 수치는 공공데이터로 추정한 값(검증 전)이에요.")),
     el("div", { class: "action-row" },
       mine ? el("a", { class: "btn big", href: `#tree/${encodeURIComponent(r.id)}` }, "내 나무 보기") : el("button", { type: "button", class: "btn big", onclick: () => befriend(r) }, "친구 맺기 · 보호자 되기"),
@@ -573,6 +578,7 @@ function selectTree(i) {
   sheet.scrollTop = 0;
 }
 function view3dIconButton(r) {
+  if (!r.dbh) return null; // 흉고 미상이면 크기를 정할 수 없어 3D 모형을 만들지 않는다
   const btn = el("button", { type: "button", class: "sq-btn", "aria-label": "3D 모형 · AR" }, svg(CAM_SVG));
   btn.addEventListener("click", async () => {
     btn.disabled = true;
@@ -597,19 +603,21 @@ function identRows(r, extra = []) {
       return;
     }
     addr.replaceChildren(el("span", {}, a.text, el("small", { class: "sub" }, " · OpenStreetMap 기준")));
-    if (a.road && !r.road.includes(a.road) && !a.road.includes(r.road)) {
+    if (a.road && r.road !== NO_ROAD && !r.road.includes(a.road) && !a.road.includes(r.road)) {
       addr.append(el("div", { class: "sub warn" }, `원본 도로명(${r.road})과 지도 도로명(${a.road})이 달라요. 교차로 근처이거나 원본 오류일 수 있어요.`));
     }
   });
   lookup();
   return el("dl", { class: "meta ident" },
-    el("dt", {}, "관리번호"), el("dd", { class: "num" }, `${r.id} (산림청 시군구별 번호)`),
+    r.src === "osm"
+      ? [el("dt", {}, "출처"), el("dd", {}, "OpenStreetMap 나무 점(ODbL, © OpenStreetMap contributors). 관리번호·도로·흉고가 없어 탄소는 계산하지 않아요.")]
+      : [el("dt", {}, "관리번호"), el("dd", { class: "num" }, `${r.id} (산림청 시군구별 번호)`)],
     el("dt", {}, "지도 주소"), addr,
     r.dong ? el("dt", {}, "행정동") : null, r.dong ? el("dd", {}, `${r.dong} (좌표 기준)`, r.dongEdge ? el("div", { class: "sub" }, "동 경계에서 30m 안이라 이웃 동으로 잡힐 수 있어요.") : null) : null,
     el("dt", {}, "좌표"), el("dd", { class: "num" }, `${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}`),
-    el("dt", {}, "원본 도로"), el("dd", {}, r.road),
+    r.road !== NO_ROAD ? [el("dt", {}, "원본 도로"), el("dd", {}, r.road)] : null,
     r.section ? el("dt", {}, "원본 구간") : null, r.section ? el("dd", {}, r.section, el("div", { class: "sub" }, "산림청 자료의 도로구간 시점 → 종점. 나무가 그 사이 어디든 있을 수 있어요.")) : null,
-    el("dt", {}, "흉고직경"), el("dd", {}, r.dbh ? `${nf(r.dbh)}cm${r.block ? " (같은 구간 대표값 의심)" : ""}` : "없음"),
+    el("dt", {}, "흉고직경"), el("dd", {}, r.dbh ? `${nf(r.dbh)}cm${r.block ? " (같은 구간 대표값 의심)" : ""}` : "미상(측정 필요 · 둘레를 재 주세요)"),
     el("dt", {}, "데이터 품질"), el("dd", {}, `등급 ${r.grade}`),
     ...extra);
 }
@@ -622,6 +630,7 @@ function mapLinks(r, name) {
     el("a", { href: `map.html#tree-${encodeURIComponent(r.id)}` }, "전체 지도(연구용)"));
 }
 function view3dButton(r) {
+  if (!r.dbh) return null; // 흉고 미상이면 크기를 정할 수 없어 3D 모형을 만들지 않는다
   const btn = el("button", { type: "button", class: "btn ghost" }, "3D · AR");
   btn.addEventListener("click", async () => {
     btn.disabled = true;
@@ -654,7 +663,7 @@ function befriend(r) {
   input.addEventListener("input", () => { preview.querySelector("figcaption").textContent = input.value || "…"; });
   dialog("나무 이름 짓기", el("div", { class: "dialog-body" },
     el("div", { class: "preview" }, preview),
-    el("p", {}, `${r.road}의 ${josa(r.species, "과", "와")} 친구가 돼요. 이름을 지어 주세요.`),
+    el("p", {}, `${r.road !== NO_ROAD ? r.road : r.dong || "이 자리"}의 ${josa(r.species, "과", "와")} 친구가 돼요. 이름을 지어 주세요.`),
     el("div", { class: "row" }, input, ...names.map(n => el("button", { type: "button", class: "chip btn-chip", onclick: () => { input.value = n; input.dispatchEvent(new Event("input")); } }, n))),
     el("p", { class: "hint" }, cloudOn() ? "내 나무는 이 기기에 저장되고, 온라인에도 올라가요." : "보호자 기록은 이 기기의 브라우저에 저장돼요.")), {
     confirm: "친구 맺기",
@@ -752,6 +761,7 @@ async function renderTree(id) {
   const measured = posts.find(p => p.circ);
   const lastCare = posts.find(p => p.kind === "care");
   const sug = careSuggestions({ weather, season, measured: Boolean(measured), lastCareDays: lastCare ? (Date.now() - new Date(lastCare.t)) / DAY : null, species: t.species });
+  const uptake = v => (t.seq[1] !== null || t.dbh ? mass(v) : ["흉고 미상", ""]);
   const nameBtn = el("button", { type: "button", class: "name-btn", onclick: () => renameTree(t), title: "이름 바꾸기" }, el("h1", {}, t.name), el("span", { class: "edit" }, "✎"));
   setTitle(t.name);
   box.replaceChildren(el("div", { class: "page-inner" },
@@ -774,15 +784,15 @@ async function renderTree(id) {
       el("p", { class: "limit" }, "공공데이터의 좌표와 관리번호예요. 현장에서 같은 나무인지 확인하려면 관리번호 표찰(있는 경우)과 도로·구간을 함께 보세요.")),
     coGuardianBlock(t),
     el("div", { class: "kpis tight" },
-      kpi("오늘 흡수", ...mass(todayKg), "이 나무, 오늘 하루(추정)"),
-      kpi("함께한 뒤 흡수", ...mass(yearKg), `${new Date(t.since).toLocaleDateString("ko-KR")}부터`),
-      kpi("돌보는 동안 흡수", ...mass(prot), `돌봄 뒤 ${ACT.protection.care_effect_days}일 기준`),
+      kpi("오늘 흡수", ...uptake(todayKg), "이 나무, 오늘 하루(추정)"),
+      kpi("함께한 뒤 흡수", ...uptake(yearKg), `${new Date(t.since).toLocaleDateString("ko-KR")}부터`),
+      kpi("돌보는 동안 흡수", ...uptake(prot), `돌봄 뒤 ${ACT.protection.care_effect_days}일 기준`),
       kpi("내 실천 감축", ...mass(prac), "이 나무와 함께 기록한 실천")),
     sug.length ? el("section", { class: "card suggest" }, el("div", { class: "k" }, `${t.name}의 오늘 부탁`),
       ...sug.map(s => el("div", { class: "sug" }, el("p", {}, s.text, el("span", { class: "why" }, ` (${s.why})`)),
         el("button", { type: "button", class: "btn small", onclick: () => openActivity(t, "care", s.activity) }, "지금 기록")))) : null,
     el("section", { class: "card" }, el("div", { class: "k" }, "한 해 CO₂ 흡수(추정)"),
-      el("div", { class: "big num" }, t.seq[1] !== null ? `${kg(t.seq[0])}~${kg(t.seq[2])}` : "-", el("small", {}, "kg/년")),
+      el("div", { class: "big num" }, t.seq[1] !== null ? `${kg(t.seq[0])}~${kg(t.seq[2])}` : t.dbh ? "-" : "흉고 미상", el("small", {}, t.seq[1] !== null || t.dbh ? "kg/년" : "")),
       el("p", { class: "limit" }, `도시 생육 보정은 해외 기준을 썼고 국내 도시수목 상대생장식이 없어 대리식을 적용했습니다.${t.block ? " 이 구간의 흉고는 대표값으로 보여 범위를 넓게 잡았습니다." : ""}${measured ? ` 내가 잰 둘레 ${nf(measured.circ)}cm(흉고 ${nf(circumferenceToDbh(measured.circ), 1)}cm)가 기록되어 있어요.` : ""}`)),
     el("h2", {}, `${t.name}의 기록 ${posts.length}건`),
     el("div", { class: "feed" }, ...(posts.length ? posts.map(postCard) : [el("p", { class: "empty" }, "첫 기록을 남겨 보세요.")])),

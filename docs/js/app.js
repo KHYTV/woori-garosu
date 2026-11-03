@@ -248,11 +248,12 @@ function setupControls() {
   });
 }
 
-// 나무 카드
+// 나무 카드. 보충 자료(OSM)는 도로·관리번호·흉고가 없다
+const roadOf = i => (T.rd[i] != null ? T.roads[T.rd[i]] : "도로 정보 없음");
 function treeRecord(i) {
   const species = T.species[T.sp[i]];
   const info = S.species_info[species];
-  return { i, id: T.id[i], species, info, road: T.roads[T.rd[i]], dbh: T.dbh[i], grade: T.grades[T.grade[i]],
+  return { i, id: T.id[i], src: T.srcs && T.src ? T.srcs[T.src[i]] : "forest", species, info, road: roadOf(i), dbh: T.dbh[i], grade: T.grades[T.grade[i]],
     block: Boolean(T.block[i]), seq: T.seq.map(a => a[i]), stor: T.stor.map(a => a[i]), point: T.point_seq[i] };
 }
 function modelTree(t, dbh) {
@@ -287,13 +288,15 @@ function closeSheet() {
 
 function sameRoadSpecies(t) {
   let n = 0;
+  if (T.rd[t.i] == null) return 0;
   for (let k = 0; k < T.id.length; k++) if (T.rd[k] === T.rd[t.i] && T.sp[k] === T.sp[t.i]) n++;
   return n;
 }
 
 function storyText(t) {
   const n = sameRoadSpecies(t);
-  const parts = [`저는 ${t.road}에 서 있는 ${josa(t.species, "이에요", "예요")}.`];
+  const parts = [t.src === "osm" ? `저는 OpenStreetMap 기여자가 지도에 그려 넣은 ${josa(t.species === "기타" ? "나무" : t.species, "이에요", "예요")}. 수종과 흉고는 아직 기록이 없어요.`
+    : `저는 ${t.road}에 서 있는 ${josa(t.species, "이에요", "예요")}.`];
   if (t.dbh) parts.push(`줄기 지름(흉고)은 ${nf(t.dbh)}cm예요.`);
   if (n > 1) parts.push(`이 길에는 같은 ${t.species} ${nf(n)}그루가 줄지어 서 있어요.`);
   if (t.seq[1] !== null) parts.push(`한 해 동안 공기 중 CO₂를 ${kg(t.seq[0])}~${kg(t.seq[2])}kg쯤 흡수하는 것으로 추정돼요.`);
@@ -369,15 +372,15 @@ function renderSheet(t) {
       el("button", { type: "button", "aria-pressed": String(cond === key), onclick: () => { cond = key; store.write("wg-cond", key); renderSheet(t); } }, label)));
   sheet.replaceChildren(
     el("div", { class: "sheet-head" },
-      el("div", {}, el("h2", {}, t.species), el("div", { class: "id" }, `관리번호 ${t.id} · ${t.info.scientific_name}`)),
+      el("div", {}, el("h2", {}, t.species), el("div", { class: "id" }, `${t.src === "osm" ? "OpenStreetMap 나무(ODbL)" : "관리번호 " + t.id} · ${t.info.scientific_name}`)),
       el("button", { type: "button", class: "close", "aria-label": "닫기", onclick: closeSheet }, "×")),
     el("dl", { class: "meta" },
       el("dt", {}, "도로구간"), el("dd", {}, t.road),
-      el("dt", {}, "흉고직경"), el("dd", {}, t.dbh ? `${nf(t.dbh)} cm${t.block ? " (대표값 의심)" : ""}` : "없음"),
+      el("dt", {}, "흉고직경"), el("dd", {}, t.dbh ? `${nf(t.dbh)} cm${t.block ? " (대표값 의심)" : ""}` : "미상(측정 필요)"),
       ...shapeRow(t),
       el("dt", {}, "데이터 품질"), el("dd", {}, el("span", { class: "chip" }, el("span", { class: "dot", style: `background:${GRADE_COLOR[g]}` }), `등급 ${g} · ${GRADE_TEXT[g]}`))),
     el("p", { class: "story" }, storyText(t)),
-    t.dbh ? el("div", { class: "row" }, view3dButton(t)) : null,
+    ...(t.dbh ? [el("div", { class: "row" }, view3dButton(t))] : []),  // replaceChildren은 null을 글자로 넣는다
     seg, carbonCard(t),
     guardianBlock(t));
   sheet.hidden = false;
@@ -473,7 +476,7 @@ function renderSummary() {
       kpi("연간 CO₂ 흡수량", nf(t.seq_t[1]), "t/년", `80% 범위 ${nf(t.seq_t[0])}–${nf(t.seq_t[2])} t/년`),
       kpi("흉고 대표값 의심", block ? pct(block.share) : "–", "", "같은 구간·수종에서 같은 흉고가 10그루 이상")),
     mine.length ? el("div", {}, el("h2", {}, `내가 맡은 나무 ${mine.length}그루`), el("ul", {},
-      ...mine.map(i => el("li", {}, el("a", { href: `#tree-${encodeURIComponent(T.id[i])}` }, `${T.species[T.sp[i]]} · ${T.roads[T.rd[i]]} · ${T.id[i]}`))))) : null,
+      ...mine.map(i => el("li", {}, el("a", { href: `#tree-${encodeURIComponent(T.id[i])}` }, `${T.species[T.sp[i]]} · ${roadOf(i)} · ${T.id[i]}`))))) : null,
     el("h2", {}, "수종별"),
     el("div", { class: "tablebox" }, el("table", {},
       el("thead", {}, el("tr", {}, el("th", {}, "수종"), el("th", { class: "r" }, "그루"), el("th", { class: "r" }, "흉고 중앙값"), el("th", { class: "r" }, "연간 흡수(수종 전체)"), el("th", { class: "r" }, "한 그루 연간 흡수"))),

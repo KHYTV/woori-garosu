@@ -16,11 +16,18 @@ import pandas as pd
 from shapely.geometry import Point, shape
 from shapely.prepared import prep
 
-from . import carbon, etl
+from . import carbon, etl, osm_trees
 from .schema import CONFIG_DIR, OUT_DIR, RAW_DIR, ROOT
 
 DOCS = ROOT / "docs"
 GRADES = ["A", "B", "C", "X"]
+# 나무 출처. trees.json의 src는 이 목록의 번호다
+SOURCES = {
+    "forest": {"label": "산림청 도시숲가로수관리 가로수 현황(2025-08-26판)", "license": "공공데이터포털, 이용허락범위 제한 없음",
+               "url": "https://www.data.go.kr/data/15120900/fileData.do"},
+    "osm": {"label": "OpenStreetMap 나무 점(natural=tree)", "license": "ODbL 1.0, © OpenStreetMap contributors",
+            "url": "https://www.openstreetmap.org/copyright"},
+}
 # 구간 시점·종점명("호성동1가 743-158 잡")에서 동 이름만 뽑는다
 DONG_PATTERN = re.compile(r"([가-힣]{1,6}(?:동|가|리)(?:\d+가)?)")
 
@@ -107,10 +114,14 @@ def export(dataset: str) -> dict:
     src = OUT_DIR / dataset
     df = pd.read_csv(src / "carbon_profiles.csv", encoding="utf-8-sig", dtype={"tree_id": str})
     result = json.loads((src / "results.json").read_text(encoding="utf-8"))
-    df = df[df["grade"] != "X"].reset_index(drop=True)
+    df = df[df["grade"] != "X"].reset_index(drop=True).assign(src="forest")
+    # 보충 자료: OSM 나무 중 산림청 나무와 겹치지 않는 것만(흉고가 없어 탄소는 계산하지 않음, 등급 C)
+    osm = osm_trees.load()
+    osm_dup = osm_trees.near_duplicates(osm, df)
+    df = pd.concat([df, osm[~osm_dup]], ignore_index=True)
 
     species = sorted(df["species_ko"].unique())
-    roads = sorted(df["road_section"].astype(str).unique())
+    roads = sorted(df["road_section"].dropna().astype(str).unique())
     sp_idx = {s: i for i, s in enumerate(species)}
     rd_idx = {r: i for i, r in enumerate(roads)}
     issues = df["issues"].fillna("")
@@ -139,7 +150,8 @@ def export(dataset: str) -> dict:
         "lon": _round_list(df["lon"], 6), "lat": _round_list(df["lat"], 6),
         "dbh": _round_list(df["dbh_cm"], 1),
         "sp": df["species_ko"].map(sp_idx).tolist(),
-        "rd": df["road_section"].astype(str).map(rd_idx).tolist(),
+        "rd": [None if pd.isna(r) else rd_idx[str(r)] for r in df["road_section"]],  # OSM 나무는 도로 정보가 없다
+        "srcs": list(SOURCES), "src": df["src"].map(list(SOURCES).index).tolist(),
         "grade": df["grade"].map(GRADES.index).tolist(),
         "block": issues.str.contains("dbh_block").astype(int).tolist(),
         "seq": [_round_list(df[f"seq_co2_p{q}"], 1) for q in (10, 50, 90)],
@@ -161,6 +173,8 @@ def export(dataset: str) -> dict:
                                         "total_storage_t", "rep_seq", "dbh_block_share")} for s in result["species"]],
         "roads": sorted(result["roads"], key=lambda r: -r["count"])[:30],
         "species_info": species_info,
+        "sources": [{"key": k, **v, "count": int((df["src"] == k).sum())} for k, v in SOURCES.items()],
+        "trees_total": int(len(df)), "trees_without_dbh": int(df["dbh_cm"].isna().sum()),
     }
 
     out = DOCS / "data"
@@ -187,7 +201,8 @@ def export(dataset: str) -> dict:
                         '<style>body{margin:0}[hidden]{display:none!important}</style>\n</head>\n<body>\n'
                         + html + "\n</body>\n</html>\n")
             (reports / target).write_text(html, encoding="utf-8")
-    return {"trees": len(df), "species": len(species), "roads": len(roads), "dongs": len(dongs),
+    return {"trees": len(df), "by_source": df["src"].value_counts().to_dict(),
+            "osm_dropped_as_duplicate": int(osm_dup.sum()), "species": len(species), "roads": len(roads), "dongs": len(dongs),
             "dong_source": "행정동 경계(좌표)" if polygons else "구간 이름 글자(법정동)",
             "trees_without_dong": int(df["dong"].isna().sum()),
             "trees_near_dong_edge": int(df["dong_edge"].sum()),

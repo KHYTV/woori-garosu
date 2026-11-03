@@ -17,10 +17,13 @@ const SEASON_LINE = {
   winter: ["지금은 쉬는 계절이에요. 잎이 없어서 흡수량은 거의 0이지만, 뿌리는 봄을 준비해요.", "겨울눈 속에 벌써 내년 잎이 들어 있어요."],
 };
 
+// 도로 정보가 없는 나무(OSM 보충 자료)는 동 이름으로 말한다
+const placeOf = tree => (tree.road && tree.road !== "도로 정보 없음" ? tree.road : tree.dong || "이 동네");
+
 // 처음 친구가 됐을 때
 export function greeting(ctx) {
   const { tree, weather, season } = ctx;
-  const lines = [`안녕하세요, ${ctx.guardianName ? ctx.guardianName + "님" : "보호자님"}! 저는 ${tree.road}에 서 있는 ${josa(tree.species, "이에요", "예요")}. ${tree.name}라고 불러 주셔서 고마워요.`];
+  const lines = [`안녕하세요, ${ctx.guardianName ? ctx.guardianName + "님" : "보호자님"}! 저는 ${placeOf(tree)}에 서 있는 ${josa(tree.species, "이에요", "예요")}. ${tree.name}라고 불러 주셔서 고마워요.`];
   if (tree.dbh) lines.push(`줄기 지름은 ${Math.round(tree.dbh)}cm쯤이고, 한 해에 CO₂를 약 ${kg(tree.annualKg)} 들이마셔요.`);
   if (weather) {
     const w = weatherLabel(weather.current.code);
@@ -44,7 +47,7 @@ export function reply(text, ctx) {
   const has = (...ws) => ws.some(w => t.includes(w));
   if (has("안녕", "하이", "헬로", "반가")) return `안녕하세요! 오늘도 와 주셔서 좋아요. ${pick(SEASON_LINE[season] || SEASON_LINE.summer)}`;
   if (has("이름")) return `${tree.name}, 마음에 들어요. 프로필에서 언제든 바꿔 주셔도 돼요.`;
-  if (has("몇 살", "나이", "언제 심")) return `제 나이는 기록에 없어요. 줄기 지름 ${Math.round(tree.dbh)}cm로 보면 ${tree.dbh < 12 ? "아직 어린 편" : tree.dbh < 30 ? "한창 자라는 중" : "꽤 오래 자란 나무"}이에요.`;
+  if (has("몇 살", "나이", "언제 심")) return !tree.dbh ? "제 나이도 줄기 지름도 아직 기록에 없어요. 줄자로 둘레를 재 주시면 얼마나 자랐는지 알 수 있어요." : `제 나이는 기록에 없어요. 줄기 지름 ${Math.round(tree.dbh)}cm로 보면 ${tree.dbh < 12 ? "아직 어린 편" : tree.dbh < 30 ? "한창 자라는 중" : "꽤 오래 자란 나무"}이에요.`;
   if (has("키", "높이", "얼마나 커")) return `정확한 키는 재지 않았지만 줄기 굵기로 어림하면 ${tree.heightM ? Math.round(tree.heightM) + "m" : "10m 안팎"}쯤 돼요.`;
   if (has("탄소", "co2", "CO2", "흡수", "얼마나")) {
     return `오늘은 약 ${kg(todayKg)}, 올해 들어 약 ${kg(yearKg)}의 CO₂를 들이마셨어요. 한 해로 치면 약 ${kg(tree.annualKg)}이에요(추정값이에요).`;
