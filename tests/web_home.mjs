@@ -8,6 +8,7 @@ import { audit, inGeom, hjdGeom } from "./gazetteer_audit.mjs";
 import { careSuggestions } from "../docs/js/weather.js";
 import { treesInBounds, friendPoints, friendRows, distText } from "../docs/js/friends.js";
 import { findArea, areaTrees, speciesCounts, centerOf, pointInArea, openArea } from "../docs/js/area.js";
+import { newUserTreeId, isUserTreeId, insidePolygon, guessDong, userRecord } from "../docs/js/usertrees.js";
 
 const root = new URL("../", import.meta.url);
 const S = JSON.parse(readFileSync(new URL("docs/data/summary.json", root), "utf8"));
@@ -165,6 +166,34 @@ const hot = careSuggestions({ weather: { flags: { heat: true }, today: { tmax: 3
 check(hot[0].activity === "water", `폭염이면 물주기 먼저: ${hot[0].activity}`);
 check(hot.some(s => s.activity === "measure"), "미측정이면 둘레 재기 제안");
 check(ACT.care.length >= 5 && ACT.practice.every(a => a.kg === null || a.kg >= 0), "활동 목록과 환산 계수");
+
+// 시민 직접 등록 나무(usertrees.js)
+const BOUND = JSON.parse(readFileSync(new URL("docs/data/boundary.geojson", root), "utf8"));
+const uid = newUserTreeId();
+check(/^u-[0-9a-z]{4,14}-[0-9a-z]{4}$/.test(uid) && /^[0-9A-Za-z_-]{1,32}$/.test(uid) && isUserTreeId(uid) && !isUserTreeId("83428"),
+  `등록 번호 ${uid}: user_trees.sql·sns_schema.sql tree_id 형식에 맞음`);
+check(insidePolygon(127.1294, 35.8468, BOUND), "전북대 캠퍼스(35.8468, 127.1294)는 전주 경계 안");
+check(!insidePolygon(126.978, 37.5665, BOUND) && !insidePolygon(127.0, 35.95, BOUND), "서울·전주 밖 좌표는 막음");
+check(guessDong(TREES, 127.1294, 35.8468) !== null, `캠퍼스 안 등록 나무의 동 어림: ${guessDong(TREES, 127.1294, 35.8468)}`);
+const ctx = { S, P, FORM };
+const withDbh = userRecord({ id: uid, lon: 127.1294, lat: 35.8468, species: "느티나무", speciesSource: "ai", circ: 94.2 }, ctx);
+check(Math.abs(withDbh.dbh - 30) < 0.1 && withDbh.seq.every(v => v > 0) && withDbh.seq[0] <= withDbh.seq[1] && withDbh.seq[1] <= withDbh.seq[2] && withDbh.annualKg > 0 && withDbh.heightM > 0,
+  `둘레 94.2cm → 흉고 ${withDbh.dbh}cm, 한 해 CO₂ ${withDbh.seq.map(v => v.toFixed(1)).join("~")}kg (추정)`);
+const noDbh = userRecord({ id: uid, lon: 127.1294, lat: 35.8468, species: null }, ctx);
+check(noDbh.species === "기타" && noDbh.speciesSource === "unknown" && noDbh.seq[1] === null && noDbh.annualKg === 0 && noDbh.dbh === null, "수종·둘레 모르면 '기타'·탄소 없음");
+const ORIG_KEYS = ["i", "id", "species", "info", "road", "dong", "section", "dongEdge", "grade", "dbh", "block", "seq", "annualKg", "lon", "lat", "heightM"];
+check(ORIG_KEYS.every(k => k in noDbh), "등록 나무 기록이 원본 treeRecord의 모든 필드를 가짐");
+const svgOut = treeSVG({ species: noDbh.species, info: noDbh.info, dbh: noDbh.dbh || 15, form: FORM, season: "summer", style: "character", mood: "happy", size: 120 });
+check(svgOut.startsWith("<svg") && !/NaN|undefined/.test(svgOut), "등록 나무 캐릭터 그림");
+
+// AI 잎 인식 문장 임베딩(pipeline/leafid.mjs가 만든 docs/data/leafid.json)
+const LEAF = JSON.parse(readFileSync(new URL("docs/data/leafid.json", root), "utf8"));
+const dim = LEAF.classes[0].emb.length;
+const unit = LEAF.classes.every(c => Math.abs(Math.hypot(...c.emb) - 1) < 1e-2 && c.emb.length === dim);
+const jeonju = Object.keys(S.species_info).filter(sp => sp !== "기타");
+check(LEAF.classes.length === jeonju.length && jeonju.every(sp => LEAF.classes.some(c => c.species === sp)) && unit,
+  `leafid.json: 전주 수종 ${LEAF.classes.length}종 × ${dim}차원, 단위 벡터 (${LEAF.model}, ${LEAF.dtype})`);
+check(Math.abs(LEAF.classes.reduce((a, c) => a + c.prior, 0) - 1) < 1e-3, "수종 사전확률 합 = 1");
 
 if (failed) { console.error(`${failed}개 실패`); process.exit(1); }
 console.log("홈 모듈 모두 통과");

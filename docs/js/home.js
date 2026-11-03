@@ -14,6 +14,7 @@ import { circumferenceToDbh } from "./carbon.js";
 import * as cloud from "./cloud.js";
 import { renderProfileScreen } from "./profile.js";
 import { initFriends, attachFriendsMap, syncFriends, focusFriend } from "./friends.js";
+import * as reg from "./register.js";
 
 const $ = sel => document.querySelector(sel);
 const nf = (v, d = 0) => Number(v).toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -64,6 +65,8 @@ async function main() {
   $("#backBtn").addEventListener("click", goBack);
   await treesReady;
   await importLegacyGuardians();
+  // 시민 직접 등록 나무(register.js): 원본 대장에 없는 나무도 내 나무·지도·카드에서 똑같이 다룬다
+  await reg.init({ S, P, FORM, T, state, season, el, svg, toast, dialog, befriend, go, myTree, refreshMine, backToList, selectTree, cloudOn, token, nf, kg, tint, tile });
   await setupCloud();
   await refreshMine();
   window.addEventListener("hashchange", route);
@@ -277,7 +280,7 @@ function treeMood(rec, posts) {
 // ---------- 내 나무 상태 ----------
 async function refreshMine() {
   const rows = await db.allTrees();
-  state.my = rows.map(r => { const i = T.id.indexOf(r.id); return i < 0 ? null : { ...treeRecord(i), ...r }; }).filter(Boolean)
+  state.my = rows.map(r => { const i = T.id.indexOf(r.id); const base = i < 0 ? reg.record(r.id) : treeRecord(i); return base ? { ...base, ...r } : null; }).filter(Boolean)
     .sort((a, b) => (a.since < b.since ? 1 : -1));
   state.posts = await db.allPosts();
 }
@@ -448,6 +451,7 @@ function renderMap() {
       el("div", { class: "sheet-d empty", id: "mapSheet" }, el("span", { class: "handle" }), el("div", { class: "head" }, el("h2", {}, "어디의 가로수를 볼까요?")),
         el("p", { class: "caption" }, "검색창에 동·도로·주소를 넣거나 ⌖ 를 눌러 내 위치 주변을 보세요.")));
     initFriends({ state, T, S, FORM, season, selectTree, runNear, backToList, toast });
+    reg.mountMapUI(box);
     ensureBigMap();
     const q = params.get("q");
     if (params.get("tree") && focusFriend(params.get("tree"))) { /* #map?tree=<id>: 그 나무를 가운데 두고 카드 */ }
@@ -472,6 +476,7 @@ async function ensureBigMap() {
     const mm = await createMiniMap($("#bigMap"), { center: [c.lon, c.lat], zoom: state.near.center ? 17 : 13, token, zoomControl: false, onSelect: i => selectTree(Number(i)) });
     state.near.map = mm;
     attachFriendsMap(mm);
+    reg.attachMap(mm);
     if (state.near.area) paintArea(mm, state.near.area, T, state.near.area.ctx);
     else if (state.near.results.length) paintResults();
     return mm;
@@ -556,6 +561,7 @@ function renderSheetList() {
   if (!res.length) {
     sheet.replaceChildren(el("span", { class: "handle" }), el("div", { class: "head" }, el("h2", {}, "반경 안에 가로수가 없어요")),
       el("p", { class: "caption" }, `${state.near.label} · 반경을 ${state.near.radius}m에서 넓히거나 다른 곳을 찾아 보세요.`));
+    reg.decorateList(sheet);
     return;
   }
   const outside = state.near.outside;
@@ -571,6 +577,7 @@ function renderSheetList() {
         el("span", { class: "dist" }, `${Math.round(d)}m`), svg(CHEV_SVG));
     })),
     el("p", { class: "caption" }, "지도의 점을 눌러도 돼요"));
+  reg.decorateList(sheet);
   sheet.scrollTop = 0;
 }
 function backToList(rerender = true) {
@@ -584,6 +591,7 @@ function backToList(rerender = true) {
 }
 // 나무 선택(디자인 후보 D 시트): 지도에 강조 + 아래 시트에 카드
 function selectTree(i) {
+  if (reg.active()) return; // 나무 등록 중에는 지도 누르기가 위치 고르기
   const r = treeRecord(i);
   const mine = myTree(r.id);
   state.near.picked = i;
@@ -710,6 +718,7 @@ function befriend(r) {
       const name = form.name.value.trim();
       if (!name) return false;
       const rec = { id: r.id, name, since: new Date().toISOString(), points: 0 };
+      if (reg.isUserTree(r.id)) await reg.keepCopy(r.id);
       await db.putTree(rec);
       await refreshMine();
       const t = myTree(r.id);
@@ -789,8 +798,8 @@ async function renderTree(id) {
   const box = $("#s-tree");
   if (!t) {
     const i = T.id.indexOf(id);
-    if (i < 0) { box.replaceChildren(el("div", { class: "page-inner" }, el("p", { class: "empty" }, "나무를 찾을 수 없어요."))); return; }
-    const r = treeRecord(i);
+    const r = i < 0 ? reg.record(id) : treeRecord(i);
+    if (!r) { box.replaceChildren(el("div", { class: "page-inner" }, el("p", { class: "empty" }, "나무를 찾을 수 없어요."))); return; }
     box.replaceChildren(el("div", { class: "page-inner" }, el("div", { class: "card tree-card" }, el("div", { class: "tree-card-head" }, avatar(r, { size: 72 }), el("div", {}, el("h2", {}, r.species), el("div", { class: "id" }, r.road))),
       el("div", { class: "row" }, el("button", { type: "button", class: "btn", onclick: () => befriend(r) }, "친구 맺기 · 보호자 되기"), el("a", { class: "btn ghost", href: "#map" }, "동네 찾기")))));
     return;
@@ -821,12 +830,12 @@ async function renderTree(id) {
       el("a", { class: "btn ghost", href: `#profile?tree=${encodeURIComponent(id)}` }, "🌱 생활 실천"),
       el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care", "observe") }, "📷 사진 올리기"),
       el("a", { class: "btn ghost", href: `#photo/${encodeURIComponent(id)}` }, "🖼️ 사진·캐릭터·AR"),
-      view3dButton(t)),
+      t.dbh ? view3dButton(t) : null),
     el("section", { class: "card where" }, el("div", { class: "k" }, "이 나무가 서 있는 곳"),
       el("div", { class: "minimap small", id: "treeMap", role: "region", "aria-label": `${t.name} 위치 지도` }),
       el("div", { class: "row" }, el("a", { class: "btn small", id: "viewOnMap", href: `#map?tree=${encodeURIComponent(id)}` }, "지도에서 보기")),
-      identRows(t), mapLinks(t, t.name),
-      el("p", { class: "limit" }, "공공데이터의 좌표와 관리번호예요. 현장에서 같은 나무인지 확인하려면 관리번호 표찰(있는 경우)과 도로·구간을 함께 보세요.")),
+      t.user ? reg.identRows(t) : identRows(t), mapLinks(t, t.name),
+      el("p", { class: "limit" }, t.user ? "시민이 직접 등록한 위치예요(미검증). 산림청 가로수 대장에는 없는 나무예요." : "공공데이터의 좌표와 관리번호예요. 현장에서 같은 나무인지 확인하려면 관리번호 표찰(있는 경우)과 도로·구간을 함께 보세요.")),
     coGuardianBlock(t),
     el("div", { class: "kpis tight" },
       kpi("오늘 흡수", ...uptake(todayKg), "이 나무, 오늘 하루(추정)"),
@@ -837,8 +846,8 @@ async function renderTree(id) {
       ...sug.map(s => el("div", { class: "sug" }, el("p", {}, s.text, el("span", { class: "why" }, ` (${s.why})`)),
         el("button", { type: "button", class: "btn small", onclick: () => openActivity(t, "care", s.activity) }, "지금 기록")))) : null,
     el("section", { class: "card" }, el("div", { class: "k" }, "한 해 CO₂ 흡수(추정)"),
-      el("div", { class: "big num" }, t.seq[1] !== null ? `${kg(t.seq[0])}~${kg(t.seq[2])}` : t.dbh ? "-" : "흉고 미상", el("small", {}, t.seq[1] !== null || t.dbh ? "kg/년" : "")),
-      el("p", { class: "limit" }, `도시 생육 보정은 해외 기준을 썼고 국내 도시수목 상대생장식이 없어 대리식을 적용했습니다.${t.block ? " 이 구간의 흉고는 대표값으로 보여 범위를 넓게 잡았습니다." : ""}${measured ? ` 내가 잰 둘레 ${nf(measured.circ)}cm(흉고 ${nf(circumferenceToDbh(measured.circ), 1)}cm)가 기록되어 있어요.` : ""}`)),
+      el("div", { class: "big num" }, t.seq[1] !== null ? `${kg(t.seq[0])}~${kg(t.seq[2])}` : t.dbh || t.user ? "-" : "흉고 미상", el("small", {}, t.seq[1] !== null || t.dbh || t.user ? "kg/년" : "")),
+      el("p", { class: "limit" }, `${t.user && !t.dbh ? "둘레를 재서 기록하면(돌봄 기록 → 둘레 재기) 흡수량을 계산할 수 있어요. " : ""}도시 생육 보정은 해외 기준을 썼고 국내 도시수목 상대생장식이 없어 대리식을 적용했습니다.${t.block ? " 이 구간의 흉고는 대표값으로 보여 범위를 넓게 잡았습니다." : ""}${measured ? ` 내가 잰 둘레 ${nf(measured.circ)}cm(흉고 ${nf(circumferenceToDbh(measured.circ), 1)}cm)가 기록되어 있어요.` : ""}`)),
     el("h2", {}, `${t.name}의 기록 ${posts.length}건`),
     el("div", { class: "feed" }, ...(posts.length ? posts.map(postCard) : [el("p", { class: "empty" }, "첫 기록을 남겨 보세요.")])),
     el("div", { class: "row end" }, el("button", { type: "button", class: "btn ghost small danger", onclick: () => unfriend(t) }, "친구 끊기"))));
