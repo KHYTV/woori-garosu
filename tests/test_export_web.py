@@ -22,7 +22,7 @@ def test_places_groups_dong_and_road_with_centroids():
     by = {(p["kind"], p["name"]): p for p in out}
     assert by[("dong", "효자5동")]["count"] == 2
     assert abs(by[("dong", "효자5동")]["lon"] - 127.15) < 1e-6
-    assert by[("jibun", "효자동3가")]["count"] == 3
+    assert ("jibun", "효자동3가") not in by  # 법정동 위치는 지명 사전(gazetteer)이 OSM으로 정한다
     assert by[("road", "백제대로")]["count"] == 3
     assert ("dong", "None") not in by
     assert [p["kind"] for p in out] == sorted(p["kind"] for p in out)  # 종류별로 묶이고, 그 안에서 나무 수 내림차순

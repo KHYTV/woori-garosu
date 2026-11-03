@@ -91,9 +91,11 @@ def assign_dong(lons, lats, polygons, with_edge=False):
 
 
 def places(df: pd.DataFrame) -> list[dict]:
-    """주소 검색용 장소 목록: 동과 도로구간마다 나무 수와 중심 좌표."""
+    """행정동과 도로구간마다 나무 수와 중심 좌표(나무 좌표 평균). 지명 사전(pipeline.gazetteer)이 도로 항목을 가져다 쓴다.
+    원본 구간 글자에서 뽑은 법정동(jibun_dong)은 구간이 여러 동을 지나 평균 좌표가 엉뚱한 곳에 찍히므로(호성동1가 → 인후동 안골)
+    여기서 빼고, 법정동 위치는 지명 사전이 OpenStreetMap 동네 점으로 정한다."""
     out = []
-    for kind, col in (("dong", "dong"), ("jibun", "jibun_dong"), ("road", "road_section")):
+    for kind, col in (("dong", "dong"), ("road", "road_section")):
         if col not in df.columns:
             continue
         grouped = df.dropna(subset=[col]).groupby(col)
@@ -170,6 +172,9 @@ def export(dataset: str) -> dict:
     (out / "summary.json").write_text(json.dumps(summary, **compact), encoding="utf-8")
     (out / "params.json").write_text(json.dumps(carbon.load_params(), **compact), encoding="utf-8")
     (out / "places.json").write_text(json.dumps(places(df), **compact), encoding="utf-8")
+    from . import gazetteer, osm_fetch  # 도로 목록이 바뀌었으니 지명 사전도 다시 만든다(OSM 캐시가 있을 때)
+    if all((osm_fetch.OSM_DIR / f"{n}.json").exists() for n in osm_fetch.QUERIES):
+        gazetteer.build()
     shutil.copyfile(CONFIG_DIR / "boundaries" / "jeonju_osm.geojson", out / "boundary.geojson")
     shutil.copyfile(CONFIG_DIR / "tree_form.json", out / "tree_form.json")
     shutil.copyfile(CONFIG_DIR / "activities.json", out / "activities.json")
