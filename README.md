@@ -32,6 +32,15 @@ GitHub Pages가 `main` 브랜치의 `docs/`를 그대로 배포한다.
    기록할 때 함께할 나무를 고르며, 기본값은 `#profile?tree=<id>`(나무 프로필의 '생활 실천' 버튼) → 지난번에 고른 나무(`meta.practice-tree`) → 처음 친구 맺은 나무 순이다.
    친구 나무가 없으면 나무 찾기를 안내한다.
 
+- 동네 전체 보기(`docs/js/area.js`): 검색에서 행정동·법정동을 고르면(`home.js`의 `choosePlace`) 반경 대신 그 동의 경계선과 옅은 채움을 그리고 화면을 경계에 맞춘 뒤,
+  경계 안 **모든 가로수**를 수종 상징색 점으로 보여 준다(효자5동 7,060그루라 MapLibre GeoJSON 소스 + circle 레이어, id는 `area-` 접두어).
+  아래 시트에는 '○○동 가로수 n그루', 수종 비율 막대와 수종별 그루 수, 동 가운데에서 가까운 순 목록(30그루씩, '더 보기'로 50그루씩 더)이 나온다.
+  '동네 전체 | 반경 300m' 전환과 검색창의 반경 칩(동 전체 → 200 → 300 → 500m → 동 전체)으로 동 가운데 기준 반경 보기와 오간다.
+  행정동의 나무는 `trees.json`의 동 배정(원본 경계)을 그대로 써서 카드의 '동'과 수가 같다. 장소는 좌표가 아니라 경계 이름(`dongName`, 없으면 `name`)으로 찾는다.
+  경계는 `docs/data/dongs.geojson`(행정동 35개, 약 45KB): `python -m pipeline.export_dongs`가 행정동 원본을 이웃 동과 틈 없이 약 10m로 단순화해 만든다(원본과 최대 8m 차이,
+  단순화한 경계로 다시 세면 전체 0.16%인 62그루가 이웃 동으로 바뀌는 정도). 법정동 경계는 넣지 못했다: OSM 전주 경계 안에는 법정동(admin_level 10) 경계가 없고,
+  국가공간정보포털·브이월드 「법정구역경계(읍면동)」는 회원 키가 있어야 받을 수 있다. 그 파일을 GeoJSON(WGS84)으로 받아 `--jibun`으로 넘기면 `kind: "jibun"`으로 함께 들어간다.
+  경계가 없는 법정동(예: 호성동1가)은 지금처럼 그 점 주변 반경 보기로 열리고, 행정동과 이름이 같은 법정동(서신동·금암동 등)은 행정동 경계로 보여 준다.
 - 동 배정: 나무의 '동'은 좌표를 전주시 **행정동 경계 35개**(`config/boundaries/jeonju_hangjeongdong.geojson`, vuski/admdongkor ver20260701, 통계청·행안부 경계 기반)에 넣어 정한다.
   원본의 구간 시점·종점 글자에서 뽑은 법정동은 구간이 여러 동을 지나 틀리는 경우가 많아(예: 83488은 글자로는 진북동, 좌표로는 금암동) 검색 별칭(`places.json`의 `jibun`)으로만 쓴다.
   나무 카드의 '지도 주소'는 카드를 열 때 OpenStreetMap 역지오코딩으로 받은 도로명·법정동이며, 원본 도로명과 다르면 경고를 띄운다.
@@ -231,6 +240,7 @@ OSM에 점으로 그려진 나무(`natural=tree`, 2026-11-03 기준 전주 345�
 | `pipeline/osm_trees.py` | OpenStreetMap 나무 점 받기·수종 매칭·산림청 나무와 중복 제거(보충 자료) |
 | `pipeline/coverage.py` | 공백 진단: 행정동·전북대 캠퍼스·주요 생활권 반경 안 그루 수, 전주시 노선별 현황 대조 |
 | `config/boundaries/jbnu_campus_osm.geojson` | 전북대학교 전주캠퍼스 경계(OpenStreetMap way 35424732, ODbL) — 공백 진단용 |
+| `pipeline/export_dongs.py` | 홈 앱 '동네 전체 보기'용 동 경계 `docs/data/dongs.geojson`(행정동 35개, 약 10m 단순화) |
 | `pipeline/export_web.py` | 웹 데모용 정적 데이터(`docs/data`: 나무·요약·계수·장소 색인·활동 계수)와 보고서(`docs/report`) |
 | `config/activities.json` | SNS 활동 점수, 레벨, 생활 실천 감축 환산 계수(검증 전) |
 | `docs/` | 웹 데모(GitHub Pages). `index.html` 홈 앱, `map.html` 지도, `characters.html` 캐릭터 목록, `study/` 연구4 실험 |

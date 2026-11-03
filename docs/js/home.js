@@ -3,6 +3,7 @@ import { treeSVG, archetype, seasonForDate, moodFor, hashSeed, signatureColor } 
 import { dailyUptake, dailyWeight, cumulativeThisYear, uptakeBetween, yearProfile, dayOfYear, seasonWindow } from "./daily.js";
 import { nearestTrees, searchPlaces, geocode, reverseGeocode, locate, insideJeonju, distanceM, JEONJU } from "./geo.js";
 import { createMiniMap } from "./minimap.js";
+import { openArea, showArea, paintArea, clearArea, areaAt } from "./area.js";
 import { fetchWeather, weatherLabel, careSuggestions } from "./weather.js";
 import { db, compressImage } from "./db.js";
 import { greeting, proactive, reply, reaction, josa } from "./talk.js";
@@ -427,7 +428,10 @@ function renderMap() {
     const list = el("datalist", { id: "placeList" });
     input.addEventListener("input", () => list.replaceChildren(...searchPlaces(PLACES, input.value).map(p => el("option", { value: p.name }, `${PLACE_KIND[p.kind] || p.kind} · ${nf(p.count)}그루`))));
     const radiusChip = el("button", { type: "button", class: "radius-chip", title: "반경 바꾸기 (200·300·500m)", onclick: () => {
-      const steps = [200, 300, 500];
+      const steps = [200, 300, 500], back = areaAt(state.near.center);
+      // 동네 전체 → 반경 200 → 300 → 500 → 다시 동네 전체(동 가운데를 기준으로 볼 때만)
+      if (back && !state.near.area && state.near.radius === steps[steps.length - 1]) { state.near.radius = steps[0]; return showAreaView(back); }
+      if (state.near.area) return toRadius();
       state.near.radius = steps[(steps.indexOf(state.near.radius) + 1) % steps.length];
       radiusChip.textContent = `${state.near.radius}m`;
       if (state.near.center) runNear();
@@ -467,7 +471,8 @@ async function ensureBigMap() {
     const mm = await createMiniMap($("#bigMap"), { center: [c.lon, c.lat], zoom: state.near.center ? 17 : 13, token, zoomControl: false, onSelect: i => selectTree(Number(i)) });
     state.near.map = mm;
     attachFriendsMap(mm);
-    if (state.near.results.length) paintResults();
+    if (state.near.area) paintArea(mm, state.near.area, T, state.near.area.ctx);
+    else if (state.near.results.length) paintResults();
     return mm;
   } catch (err) { setMapStatus(`지도를 불러오지 못했어요 (${err.message})`); return null; }
   finally { state.near.mapLoading = false; }
@@ -480,17 +485,32 @@ async function findByText(q) {
   // 동·도로 이름만이면 색인으로, 숫자(번지)나 모르는 말이 섞이면 지오코딩
   const exact = local && words.every(w => local.name.includes(w));
   if (exact) {
-    state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name}(${PLACE_KIND[local.kind] || local.kind} 중심)`;
-    return runNear();
+    return choosePlace({ ...local, label: `${local.name}(${PLACE_KIND[local.kind] || local.kind} 중심)` });
   }
   setMapStatus("주소를 찾는 중…");
   const hits = await geocode(q);
   const hit = hits.find(h => insideJeonju(h.lon, h.lat));
-  if (hit) { state.near.center = { lon: hit.lon, lat: hit.lat }; state.near.label = hit.name; return runNear(); }
-  if (local) { state.near.center = { lon: local.lon, lat: local.lat }; state.near.label = `${local.name} (주소는 못 찾아 가까운 ${PLACE_KIND[local.kind] || local.kind}으로)`; return runNear(); }
+  if (hit) return choosePlace(hit);
+  if (local) return choosePlace({ ...local, label: `${local.name} (주소는 못 찾아 가까운 ${PLACE_KIND[local.kind] || local.kind}으로)` });
   setMapStatus("");
   toast("찾지 못했어요. 동 이름이나 도로 이름으로 다시 넣어 보세요.", true);
 }
+// 장소 선택은 모두 여기를 거친다. place = {kind, name, lon, lat, dongName?, label?}
+// 행정동·법정동이고 경계가 있으면 동네 전체 보기(area.js), 아니면 그 점 주변 반경 보기
+async function choosePlace(place) {
+  const view = await openArea(place, T).catch(() => null);
+  if (view) return showAreaView(view);
+  state.near.center = { lon: place.lon, lat: place.lat }; state.near.label = place.label || place.name;
+  return runNear();
+}
+function showAreaView(view) {
+  Object.assign(state.near, { area: view, center: view.center, label: view.name, results: [], picked: null });
+  setMapStatus("");
+  backToList(false);
+  const chip = $(".radius-chip"); if (chip) chip.textContent = "동 전체";
+  showArea(state.near.map, view, T, { S, FORM, season, token, myTree, onSelect: selectTree, onRadius: toRadius, radius: () => state.near.radius });
+}
+const toRadius = () => { state.near.label = `${state.near.area.name} 가운데`; runNear(); };
 async function findByGPS() {
   setMapStatus("내 위치를 찾는 중…");
   try {
@@ -502,6 +522,7 @@ async function findByGPS() {
 }
 function runNear() {
   const { center, radius } = state.near;
+  if (state.near.area) { state.near.area = null; clearArea(state.near.map); const chip = $(".radius-chip"); if (chip) chip.textContent = `${radius}m`; }
   state.near.results = nearestTrees(T, center.lon, center.lat, { radius, limit: 40 });
   state.near.picked = null;
   setMapStatus("");
@@ -547,11 +568,13 @@ function renderSheetList() {
   sheet.scrollTop = 0;
 }
 function backToList(rerender = true) {
+  const was = state.near.picked;
   state.near.picked = null;
   state.near.map?.setSelected(null);
   const ui = state.near.ui;
   if (ui) $("#mapSearch")?.replaceChildren(ui.form, ui.locateBtn);
-  if (rerender) renderSheetList();
+  if (rerender && state.near.area) { state.near.area.render(was); state.near.area.fit(); }
+  else if (rerender) renderSheetList();
 }
 // 나무 선택(디자인 후보 D 시트): 지도에 강조 + 아래 시트에 카드
 function selectTree(i) {
@@ -559,11 +582,12 @@ function selectTree(i) {
   const mine = myTree(r.id);
   state.near.picked = i;
   const inResults = state.near.results.some(x => x.i === i);
-  const d = state.near.center && inResults && !(state.near.center.lon === r.lon && state.near.center.lat === r.lat) ? distanceM(state.near.center.lon, state.near.center.lat, r.lon, r.lat) : null;
+  const inArea = !!state.near.area && state.near.area.idx.includes(i);
+  const d = state.near.center && !state.near.area && inResults && !(state.near.center.lon === r.lon && state.near.center.lat === r.lat) ? distanceM(state.near.center.lon, state.near.center.lat, r.lon, r.lat) : null;
   const color = signatureColor(r.species, r.info);
   state.near.map?.setSelected({ lon: r.lon, lat: r.lat, label: d !== null ? `여기서 ${Math.round(d)}m` : (mine?.name || r.species), color }, "sheet");
   $("#mapSearch")?.replaceChildren(el("button", { type: "button", class: "sq-btn ink", "aria-label": "목록으로", onclick: () => backToList() }, svg(BACK_SVG)),
-    el("span", { class: "map-pill" }, inResults ? `${state.near.label} · ${state.near.radius}m 안 ${nf(state.near.results.length)}그루` : "지도에서 고른 나무"));
+    el("span", { class: "map-pill" }, inArea ? `${state.near.area.name} 전체 ${nf(state.near.area.idx.length)}그루` : inResults ? `${state.near.label} · ${state.near.radius}m 안 ${nf(state.near.results.length)}그루` : "지도에서 고른 나무"));
   for (const b of document.querySelectorAll(".row-tree")) b.setAttribute("aria-pressed", String(Number(b.dataset.i) === i));
   const sheet = $("#mapSheet");
   sheet.classList.remove("empty");
