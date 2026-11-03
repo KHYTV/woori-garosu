@@ -5,6 +5,7 @@ import { treeSVG, archetype, MOODS, moodFor } from "../docs/js/characters.js";
 import { dailyWeight, uptakeBetween, cumulativeThisYear, yearProfile, seasonWindow } from "../docs/js/daily.js";
 import { searchPlaces, nearestTrees, distanceM } from "../docs/js/geo.js";
 import { careSuggestions } from "../docs/js/weather.js";
+import { findArea, areaTrees, speciesCounts, centerOf, pointInArea, openArea } from "../docs/js/area.js";
 
 const root = new URL("../", import.meta.url);
 const S = JSON.parse(readFileSync(new URL("docs/data/summary.json", root), "utf8"));
@@ -60,6 +61,33 @@ check(Math.abs(distanceM(127.1, 35.8, 127.1, 35.809) - 1000) < 15, "거리 계�
 const T = { id: ["a", "b", "c"], lon: [127.10, 127.101, 127.2], lat: [35.80, 35.80, 35.80] };
 const near = nearestTrees(T, 127.1, 35.8, { radius: 300 });
 check(near.length === 2 && near[0].i === 0, `반경 안 나무 ${near.length}그루, 가장 가까운 것 ${near[0]?.i}`);
+
+// 동네 전체 보기(area.js): 경계 이름으로 찾기, 경계 안 나무 수 = 동 배정 수
+const AREAS = JSON.parse(readFileSync(new URL("docs/data/dongs.geojson", root), "utf8"));
+const TREES = JSON.parse(readFileSync(new URL("docs/data/trees.json", root), "utf8"));
+const dongFeats = AREAS.features.filter(f => f.properties.kind === "dong");
+check(dongFeats.length === 35 && AREAS.features.every(f => f.properties.name && f.properties.gu && /Polygon/.test(f.geometry.type)), `동 경계 ${AREAS.features.length}개(행정동 ${dongFeats.length})`);
+check(findArea(AREAS, { kind: "dong", name: "효자5동", lon: 0, lat: 0 })?.properties.name === "효자5동", "행정동 '효자5동' → 경계(좌표는 안 씀)");
+check(findArea(AREAS, { kind: "jibun", name: "서신동 (지번)", dongName: "서신동" })?.properties.name === "서신동", "dongName으로 찾기, 법정동 경계가 없으면 같은 이름 행정동");
+check(findArea(AREAS, { kind: "road", name: "서신동" }) === null && findArea(AREAS, { kind: "dong", name: "없는동" }) === null, "도로·모르는 이름은 반경 보기로");
+const assigned = new Map();
+for (const k of TREES.dong) if (k !== null) assigned.set(TREES.dongs[k], (assigned.get(TREES.dongs[k]) || 0) + 1);
+let countBad = [], centerOut = [], polyGap = 0, polyTotal = 0;
+for (const f of dongFeats) {
+  const name = f.properties.name, want = assigned.get(name) || 0;
+  const got = areaTrees(TREES, f).length, byPoly = areaTrees(TREES, f, { byPolygon: true }).length;
+  if (got !== want) countBad.push(`${name} ${got}/${want}`);
+  polyGap += Math.abs(byPoly - want); polyTotal += want;
+  const c = centerOf(f.geometry);
+  if (!pointInArea(c.lon, c.lat, f.geometry)) centerOut.push(name);
+}
+check(countBad.length === 0, `동마다 경계 안 나무 수 = trees.json 동 배정 수 ${countBad.slice(0, 3).join(", ")}`);
+check(centerOut.length === 0, `동 가운데 점이 경계 안 ${centerOut.join(", ")}`);
+check(polyGap / polyTotal < 0.005, `단순화한 경계로 센 수와 차이 ${polyGap}그루(${(polyGap / polyTotal * 100).toFixed(2)}%, 경계 근처 나무)`);
+const hz = await openArea({ kind: "dong", name: "효자5동" }, TREES, AREAS);
+check(hz && hz.idx.length === assigned.get("효자5동") && hz.dist.get(hz.idx[0]) <= hz.dist.get(hz.idx.at(-1)), `효자5동 ${hz?.idx.length}그루, 가운데에서 가까운 순`);
+const top = speciesCounts(TREES, hz.idx);
+check(top.reduce((a, [, n]) => a + n, 0) === hz.idx.length && top[0][1] >= top[1][1], `수종 요약 ${top.length}종, 1위 ${top[0][0]} ${top[0][1]}`);
 
 // 날씨 제안
 const hot = careSuggestions({ weather: { flags: { heat: true }, today: { tmax: 35 }, past7Rain: 0 }, season: "summer", measured: false });
