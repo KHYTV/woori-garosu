@@ -19,6 +19,8 @@ import { photoField } from "./camera.js";
 import { isMemo, syncable, treePhotos, isProof, cutText, infoButton, openMemo, deleteMemo, explainOnce } from "./records.js";
 import * as guide from "./guide.js";
 import * as community from "./community.js";
+import { initSheet } from "./sheet.js";
+import { isConifer } from "./characters.js";
 
 const $ = sel => document.querySelector(sel);
 const nf = (v, d = 0) => Number(v).toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -462,6 +464,7 @@ function renderMap() {
       el("div", { class: "sheet-d empty", id: "mapSheet" }, el("span", { class: "handle" }), el("div", { class: "head" }, el("h2", {}, "어디의 가로수를 볼까요?")),
         el("p", { class: "caption" }, "검색창에 동·도로·주소를 넣거나 ⌖ 를 눌러 내 위치 주변을 보세요."),
         el("button", { type: "button", class: "btn big", onclick: findByGPS }, svg(LOCATE_SVG), "내 주변 나무 보기")));
+    initSheet($("#mapSheet"));
     initFriends({ state, T, S, FORM, season, selectTree, runNear, backToList, toast });
     reg.mountMapUI(box);
     guide.mountMapHelp(box);
@@ -564,14 +567,14 @@ function paintResults() {
   if (!mm) return;
   const { center, radius, results } = state.near;
   mm.setCenter(center, radius);
-  mm.setTrees(results.map(({ i }) => { const sp = T.species[T.sp[i]]; return { i, lon: T.lon[i], lat: T.lat[i], label: sp, color: signatureColor(sp, S.species_info[sp]) }; }));
+  mm.setTrees(results.map(({ i }) => { const sp = T.species[T.sp[i]]; return { i, lon: T.lon[i], lat: T.lat[i], label: sp, color: signatureColor(sp, S.species_info[sp]), cone: isConifer(sp, S.species_info[sp]) }; }));
   mm.setSelected(null);
   const h = $("#bigMap")?.clientHeight || 600;
   mm.fit([center, ...results.map(({ i }) => ({ lon: T.lon[i], lat: T.lat[i] }))], { top: 130, bottom: Math.round(h * 0.5), left: 36, right: 36 });
   const counts = new Map();
   for (const { i } of results) { const sp = T.species[T.sp[i]]; counts.set(sp, (counts.get(sp) || 0) + 1); }
   $("#legend")?.replaceChildren(...[...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
-    .map(([sp, n]) => el("span", {}, el("i", { style: `background:${signatureColor(sp, S.species_info[sp])}` }), `${sp} ${n}`)));
+    .map(([sp, n]) => el("span", {}, el("i", { class: isConifer(sp, S.species_info[sp]) ? "cone" : null, style: `background:${signatureColor(sp, S.species_info[sp])}` }), `${sp} ${n}`)));
 }
 function renderSheetList() {
   const sheet = $("#mapSheet");

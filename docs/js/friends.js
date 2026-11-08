@@ -1,7 +1,8 @@
 // 지도 위 친구 나무: 내 나무 표시(하트 + 지은 이름), 화면 안 가로수 불러오기, '내 나무' 목록으로 다시 찾기.
 // 내 나무는 state.my 항목의 lon/lat으로 그린다. trees.json에 없는 나무(시민 등록 'u-' 등)도 좌표만 있으면 보인다.
 // 지도 레이어·소스 id는 'friends-' 접두어. DOM은 initFriends 뒤에만 건드린다(node 검사에서 순수 함수만 불러 쓸 수 있게).
-import { treeSVG, signatureColor, hashSeed } from "./characters.js";
+import { treeSVG, signatureColor, hashSeed, isConifer } from "./characters.js";
+import { addTreeLayers } from "./minimap.js";
 import { distanceM } from "./geo.js";
 
 export const AREA_MIN_ZOOM = 16;   // 이 확대부터 화면 안 가로수를 점으로 불러온다
@@ -73,18 +74,21 @@ export function attachFriendsMap(minimap) {
   mm = minimap;
   const map = mm.map;
   map.addSource("friends-area", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-  // 검색 결과 점('trees')보다 아래에, 조금 작게
-  map.addLayer({ id: "friends-area", type: "circle", source: "friends-area",
-    paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 16, 4, 19, 7], "circle-color": ["get", "color"], "circle-opacity": 0.85,
-      "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } }, map.getLayer("trees") ? "trees" : undefined);
-  map.on("click", "friends-area", e => {
-    // 검색 결과 점과 겹치면 그쪽 처리에 맡긴다
-    if (map.getLayer("trees") && map.queryRenderedFeatures(e.point, { layers: ["trees"] }).length) return;
-    const f = e.features?.[0];
-    if (f) ctx.selectTree(Number(f.properties.i));
-  });
-  map.on("mouseenter", "friends-area", () => { map.getCanvas().style.cursor = "pointer"; });
-  map.on("mouseleave", "friends-area", () => { map.getCanvas().style.cursor = ""; });
+  // 검색 결과 점('trees')보다 아래에, 조금 작게. 침엽수는 세모(friends-area-cone)
+  const layers = addTreeLayers(map, { id: "friends-area", source: "friends-area", color: ["get", "color"], opacity: 0.85, strokeWidth: 1.5,
+    radius: ["interpolate", ["linear"], ["zoom"], 16, 4, 19, 7], iconSize: ["interpolate", ["linear"], ["zoom"], 16, 0.6, 19, 0.95] }, map.getLayer("trees") ? "trees" : undefined);
+  const searchLayers = ["trees", "trees-cone"];
+  for (const id of layers) {
+    map.on("click", id, e => {
+      // 검색 결과 점과 겹치면 그쪽 처리에 맡긴다
+      const above = searchLayers.filter(l => map.getLayer(l));
+      if (above.length && map.queryRenderedFeatures(e.point, { layers: above }).length) return;
+      const f = e.features?.[0];
+      if (f) ctx.selectTree(Number(f.properties.i));
+    });
+    map.on("mouseenter", id, () => { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
+  }
   map.on("moveend", refreshArea);
   map.on("zoom", () => map.getContainer().classList.toggle("friends-names", map.getZoom() >= NAME_MIN_ZOOM));
   map.getContainer().classList.toggle("friends-names", map.getZoom() >= NAME_MIN_ZOOM);
@@ -104,7 +108,7 @@ function refreshArea() {
     n = list.length;
     map.getSource("friends-area")?.setData({ type: "FeatureCollection", features: list.map(i => {
       const sp = ctx.T.species[ctx.T.sp[i]];
-      return { type: "Feature", geometry: { type: "Point", coordinates: [ctx.T.lon[i], ctx.T.lat[i]] }, properties: { i, color: signatureColor(sp, ctx.S.species_info[sp]) } };
+      return { type: "Feature", geometry: { type: "Point", coordinates: [ctx.T.lon[i], ctx.T.lat[i]] }, properties: { i, color: signatureColor(sp, ctx.S.species_info[sp]), cone: isConifer(sp, ctx.S.species_info[sp]) } };
     }) });
   } else {
     map.getSource("friends-area")?.setData({ type: "FeatureCollection", features: [] });
