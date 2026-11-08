@@ -7,6 +7,8 @@
   GET  /__mock/rows        저장된 모든 표 보기
   POST /__mock/fail?on=1   전송 실패(503) 흉내 켜기, on=0이면 끄기
   POST /__mock/reset       SNS 표 비우기
+  POST /__mock/community?on=0  community.sql을 아직 실행하지 않은 서버 흉내(커뮤니티 함수 404), on=1이면 되돌리기
+                               (시작할 때 --no-community 를 붙여도 된다)
 
 PostgREST 흉내는 이 앱이 쓰는 만큼만: select(무시), eq/gt/in 필터, order, limit, on_conflict + Prefer resolution.
 """
@@ -24,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PID = re.compile(r"^[A-Z2-9]{8}$")
 CONDITIONS = {"text", "image", "immersive"}
 ROWS: dict[str, dict] = {}
-STATE = {"fail": False}
+STATE = {"fail": False, "community": "--no-community" not in sys.argv}
 
 # ---------- SNS ----------
 ACT = json.loads((ROOT / "config" / "activities.json").read_text(encoding="utf-8"))
@@ -33,6 +35,7 @@ CATALOG = {a["id"]: {"id": a["id"], "kind": kind, "label": a["label"], "points":
 DAILY_LIMIT = ACT.get("daily_limit_per_tree", 3)
 USERS: dict[str, dict] = {}       # access/refresh token → uid
 TABLES: dict[str, list] = {"guardians": [], "tree_follows": [], "activities": [], "tree_messages": []}
+PREFS: dict[str, bool] = {}       # community.sql guardian_prefs: uid → 닉네임 공개
 SEQ = {"activities": 0, "tree_messages": 0}
 KST = timezone(timedelta(hours=9))
 
@@ -44,6 +47,7 @@ def now_iso():
 def reset_sns():
     for k in TABLES:
         TABLES[k].clear()
+    PREFS.clear()
     SEQ.update(activities=0, tree_messages=0)
 
 
@@ -230,6 +234,144 @@ def delete(table, uid, query):
     return gone
 
 
+# ---------- 커뮤니티(supabase/community.sql 흉내) ----------
+FEED_LIMIT, FEED_DAYS, RANK_LIMIT, IDS_LIMIT, RECENT_DAYS = 50, 7, 50, 3000, 30
+
+
+def period_start(period):
+    now = datetime.now(KST)
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return {"day": midnight, "week": midnight - timedelta(days=now.weekday()), "month": midnight.replace(day=1),
+            "year": midnight.replace(month=1, day=1)}.get(period)
+
+
+def _t(row, col="t"):
+    return datetime.fromisoformat(row[col])
+
+
+def _upper():
+    return datetime.now(timezone.utc) + timedelta(minutes=5)
+
+
+def _acts_since(t0):
+    return [a for a in TABLES["activities"] if t0 is not None and t0 <= _t(a) <= _upper()]
+
+
+def _shown(gid, uid):
+    return gid == uid or PREFS.get(gid, False)
+
+
+def community_rankings(uid, period, target, limit):
+    g = {r["id"]: r for r in TABLES["guardians"]}
+    col = {"dong": "dong", "guardian": "guardian_id", "tree": "tree_id"}.get(target)
+    groups = {}
+    for a in _acts_since(period_start(period)):
+        k = a.get(col) if col else None
+        if k is None:
+            continue
+        d = groups.setdefault(k, {"gs": set(), "ts": set(), "n": 0, "pts": 0, "kg": 0.0, "dongs": set()})
+        d["gs"].add(a["guardian_id"]); d["ts"].add(a["tree_id"]); d["n"] += 1; d["pts"] += a["points"]; d["kg"] += a["kg"] or 0
+        if a.get("dong"):
+            d["dongs"].add(a["dong"])
+    my_dong = g.get(uid, {}).get("dong")
+    rows = []
+    for k, d in groups.items():
+        r = {"name": None, "tree_id": None, "species": None, "dong": None, "guardians": len(d["gs"]), "trees": len(d["ts"]),
+             "activities": d["n"], "points": d["pts"], "kg": round(d["kg"], 3)}
+        if target == "dong":
+            r.update(name=k, dong=k, is_me=k == my_dong)
+        elif target == "guardian":
+            show = _shown(k, uid) and k in g
+            r.update(guardians=1, name=g[k]["nickname"] if show else None, dong=g[k].get("dong") if show else None, is_me=k == uid)
+        else:
+            fs = sorted([f for f in TABLES["tree_follows"] if f["tree_id"] == k], key=lambda f: f["since"])
+            r.update(trees=1, name=fs[0]["tree_name"] if fs else None, tree_id=k, species=next((f["species"] for f in fs if f.get("species")), None),
+                     dong=max(d["dongs"]) if d["dongs"] else None, is_me=any(f["guardian_id"] == uid for f in fs))
+        rows.append(r)
+    key = {"tree": lambda r: (-r["activities"], -r["points"]), "guardian": lambda r: (-r["points"], -r["activities"])}.get(target, lambda r: (-r["points"], -r["guardians"]))
+    rows.sort(key=key)
+    prev = None
+    for i, r in enumerate(rows):   # rank(): 같은 값이면 같은 순위
+        if key(r) != prev:
+            rank, prev = i + 1, key(r)
+        r["rank"] = rank
+    n = max(1, min(int(limit or 20), RANK_LIMIT))
+    out = sorted([r for r in rows if r["rank"] <= n or r["is_me"]], key=lambda r: (r["rank"], r["name"] or ""))
+    return out[:RANK_LIMIT + 10]
+
+
+def community_stats():
+    first = {}   # 나무마다 첫 친구 맺기 시각
+    for f in TABLES["tree_follows"]:
+        first[f["tree_id"]] = min(first.get(f["tree_id"], _t(f, "since")), _t(f, "since"))
+    out = []
+    for p in ("day", "week"):
+        t0 = period_start(p)
+        acts = _acts_since(t0)
+        out.append({"period": p, "since": t0.isoformat(),
+                    "new_trees": sum(1 for s in first.values() if t0 <= s <= _upper()),
+                    "active_guardians": len({a["guardian_id"] for a in acts}), "activities": len(acts),
+                    "kg": round(sum(a["kg"] or 0 for a in acts), 3),
+                    "total_trees": len({f["tree_id"] for f in TABLES["tree_follows"]}), "total_guardians": len(TABLES["guardians"])})
+    return out
+
+
+def community_feed(uid, limit):
+    g = {r["id"]: r for r in TABLES["guardians"]}
+    now = datetime.now(timezone.utc)
+    rows = [a for a in TABLES["activities"] if now - timedelta(days=FEED_DAYS) < _t(a) <= _upper() and a["guardian_id"] in g]
+    rows.sort(key=lambda a: (_t(a), a["id"]), reverse=True)
+    out = []
+    for a in rows[:max(1, min(int(limit or 30), FEED_LIMIT))]:
+        f = next((f for f in TABLES["tree_follows"] if f["guardian_id"] == a["guardian_id"] and f["tree_id"] == a["tree_id"]), None)
+        out.append({"t": _t(a).replace(second=0, microsecond=0).isoformat(), "dong": a.get("dong"), "activity": a["activity"],
+                    "label": CATALOG[a["activity"]]["label"], "kind": a["kind"], "tree_name": f["tree_name"] if f else None,
+                    "nickname": g[a["guardian_id"]]["nickname"] if _shown(a["guardian_id"], uid) else None, "is_me": a["guardian_id"] == uid})
+    return out
+
+
+def community_trees_in_view(uid, ids):
+    want = set((ids or [])[:IDS_LIMIT])
+    now = datetime.now(timezone.utc)
+    by = {}
+    for f in TABLES["tree_follows"]:
+        if f["tree_id"] in want:
+            by.setdefault(f["tree_id"], []).append(f)
+    out = []
+    for tid, fs in by.items():
+        others = sum(1 for f in fs if f["guardian_id"] != uid)
+        if not others:
+            continue
+        acts = [a for a in TABLES["activities"] if a["tree_id"] == tid and _t(a) <= _upper()]
+        last = max((_t(a).astimezone(KST).date() for a in acts), default=None)
+        out.append({"tree_id": tid, "guardians": len(fs), "others": others, "last_day": last.isoformat() if last else None,
+                    "recent": sum(1 for a in acts if _t(a) > now - timedelta(days=RECENT_DAYS)), "is_mine": any(f["guardian_id"] == uid for f in fs)})
+    return out
+
+
+def community_rpc(name, body, uid):
+    if not STATE["community"]:
+        raise Refuse(404, f"Could not find the function public.{name}")
+    if not uid:
+        raise Refuse(401, f"permission denied for function {name}")
+    if name == "community_prefs":
+        return PREFS.get(uid, False)
+    if name == "community_set_prefs":
+        if not any(g["id"] == uid for g in TABLES["guardians"]):
+            raise Refuse(400, "join first")
+        PREFS[uid] = bool(body.get("p_show_nickname"))
+        return PREFS[uid]
+    if name == "community_rankings":
+        return community_rankings(uid, body.get("p_period", "week"), body.get("p_target", "dong"), body.get("p_limit", 20))
+    if name == "community_stats":
+        return community_stats()
+    if name == "community_feed":
+        return community_feed(uid, body.get("p_limit", 30))
+    if name == "community_trees_in_view":
+        return community_trees_in_view(uid, body.get("p_ids"))
+    raise Refuse(404, f"Could not find the function public.{name}")
+
+
 # ---------- 연구4 ----------
 def submit(pid, record):
     if not pid or not PID.match(pid):
@@ -309,6 +451,9 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/__mock/fail":
             STATE["fail"] = parse_qs(url.query).get("on", ["1"])[0] == "1"
             return self._send(200, STATE)
+        if url.path == "/__mock/community":
+            STATE["community"] = parse_qs(url.query).get("on", ["1"])[0] == "1"
+            return self._send(200, STATE)
         if url.path == "/__mock/reset":
             reset_sns(); ROWS.clear()
             return self._send(200, {"ok": True})
@@ -329,6 +474,12 @@ class Handler(BaseHTTPRequestHandler):
         if url.path.startswith("/rest/v1/rpc/"):
             body = self._body()
             name = url.path.rsplit("/", 1)[-1]
+            if name.startswith("community_"):
+                try:
+                    return self._send(200, community_rpc(name, body, self._uid()))
+                except Refuse as err:
+                    code = {404: "PGRST202", 401: "42501"}.get(err.status, "P0001")
+                    return self._send(err.status, {"code": code, "message": str(err)})
             try:
                 if name == "submit_study_record":
                     return self._send(200, submit(body.get("p_pid"), body.get("p_record") or {}))
@@ -385,6 +536,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8791
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    port = int(args[0]) if args else 8791
     print(f"mock supabase on http://localhost:{port}", flush=True)
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()

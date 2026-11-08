@@ -16,6 +16,7 @@ import { renderProfileScreen } from "./profile.js";
 import { initFriends, attachFriendsMap, syncFriends, focusFriend } from "./friends.js";
 import * as reg from "./register.js";
 import { photoField } from "./camera.js";
+import * as community from "./community.js";
 
 const $ = sel => document.querySelector(sel);
 const nf = (v, d = 0) => Number(v).toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -155,7 +156,7 @@ function onlineCard() {
   }
   if (!cloudOn()) {
     return el("section", { class: "card online" }, el("div", { class: "k" }, "온라인 함께하기"),
-      el("p", { class: "limit" }, "닉네임만 정하면 같은 나무의 공동보호자와 대화하고, 우리 동네 순위에 활동이 더해져요."),
+      el("p", { class: "limit" }, "닉네임만 정하면 같은 나무의 공동보호자와 대화하고, 우리 동네 순위에 활동이 더해져요. 이웃 보호자들의 실천 소식도 함께 볼 수 있어요."),
       el("div", { class: "row" }, el("button", { type: "button", class: "btn small", onclick: joinDialog }, "참여하기")));
   }
   const box = el("section", { class: "card online" }, el("div", { class: "row between" }, el("div", { class: "k" }, `온라인 · ${state.profile.nickname}${state.profile.dong ? " · " + state.profile.dong : ""}`),
@@ -165,6 +166,8 @@ function onlineCard() {
   return box;
 }
 async function loadRankings(target) {
+  // community.sql이 서버에 있으면 현황 숫자·기간별 순위·이웃 소식(community.js), 없으면 아래 예전 30일 동네 순위
+  if (await community.renderOnline(target, { state, ACT, el, nf, massText, toast }).catch(() => false)) return;
   try {
     const [rows, mine] = await Promise.all([cloud.api.rankings(10), cloud.api.myScore()]);
     const me = state.profile.dong;
@@ -480,6 +483,7 @@ async function ensureBigMap() {
     state.near.map = mm;
     attachFriendsMap(mm);
     reg.attachMap(mm);
+    community.attachMap(mm, { T, state, selectTree, cloudOn, el });
     if (state.near.area) paintArea(mm, state.near.area, T, state.near.area.ctx);
     else if (state.near.results.length) paintResults();
     return mm;
@@ -626,6 +630,7 @@ function selectTree(i) {
       photoOr3d),
     el("details", {}, el("summary", {}, "자세한 식별 정보 · 지도 주소 · 다른 지도"), identRows(r), mapLinks(r, mine?.name)));
   sheet.scrollTop = 0;
+  community.decorateCard(sheet, r.id); // 다른 보호자가 돌보는 나무면 '보호자 n명 · 최근 활동' 한 줄
 }
 function view3dIconButton(r) {
   if (!r.dbh) return null; // 흉고 미상이면 크기를 정할 수 없어 3D 모형을 만들지 않는다

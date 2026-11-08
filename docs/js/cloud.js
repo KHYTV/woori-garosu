@@ -9,6 +9,7 @@ export function configure(c) {
   if (cfg) {
     try { session = JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { session = null; }
     if (session && session.url !== cfg.url) session = null; // 다른 서버의 세션
+    try { communityState = sessionStorage.getItem(COMMUNITY_MISSING) === cfg.url ? false : null; } catch { communityState = null; }
   }
   return Boolean(cfg);
 }
@@ -127,4 +128,44 @@ export const userTreesApi = {
       params: { on_conflict: "id" }, prefer: "resolution=merge-duplicates,return=minimal" });
   },
   unshare(id) { return rest("user_trees", { method: "DELETE", params: { id: eq(id) }, prefer: "return=minimal" }); },
+};
+
+// ---------- 커뮤니티(선택, supabase/community.sql) ----------
+// 기간별 순위·현황 숫자·이웃 소식·다른 보호자가 돌보는 나무. 참여한 사람(익명 계정)만 부를 수 있다.
+// 서버에 함수가 없으면(404) 한 번만 확인하고 이 탭이 닫힐 때까지(sessionStorage) 다시 부르지 않는다.
+const COMMUNITY_MISSING = "wg-community-missing";
+const MISSING_CODES = ["PGRST202", "42883", "42P01"];
+let communityState = null, communityProbe = null;   // null 모름 · true 있음 · false 없음
+async function communityRpc(name, body = {}) {
+  if (!cfg || communityState === false) return null;
+  try {
+    const data = await rest(`rpc/${name}`, { method: "POST", body });
+    communityState = true;
+    return data;
+  } catch (err) {
+    if (err.status === 404 || MISSING_CODES.includes(err.code)) {
+      communityState = false;
+      try { sessionStorage.setItem(COMMUNITY_MISSING, cfg.url); } catch { /* 메모리에만 */ }
+      return null;
+    }
+    throw err;
+  }
+}
+export const communityApi = {
+  // 참여 중이고 서버에 community.sql이 있으면 true. 결과는 세션 동안 기억한다
+  async available() {
+    if (!cfg || !signedIn() || communityState === false) return false;
+    if (communityState === true) return true;
+    if (!communityProbe) communityProbe = communityRpc("community_prefs").then(() => communityState === true, () => false).finally(() => { communityProbe = null; });
+    return communityProbe;
+  },
+  known: () => communityState,
+  prefs() { return communityRpc("community_prefs"); },
+  setPrefs(showNickname) { return communityRpc("community_set_prefs", { p_show_nickname: Boolean(showNickname) }); },
+  // period: day|week|month|year(한국 시간), target: dong|guardian|tree
+  rankings(period, target, limit = 10) { return communityRpc("community_rankings", { p_period: period, p_target: target, p_limit: limit }); },
+  stats() { return communityRpc("community_stats"); },
+  feed(limit = 20) { return communityRpc("community_feed", { p_limit: limit }); },
+  // 서버에는 나무 좌표가 없어 화면 안 나무의 관리번호로 묻는다(최대 3000개)
+  treesInView(ids) { return communityRpc("community_trees_in_view", { p_ids: ids.slice(0, 3000) }); },
 };
