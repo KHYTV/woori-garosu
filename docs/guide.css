@@ -1,0 +1,83 @@
+/* 처음 쓰는 사람 안내·과업 찾기 개선(docs/js/guide.js, 사용성 평가 파일럿 반영). design.css 위에 얹는다 */
+
+/* 인트로: 서비스 한 문장 + 할 수 있는 일 3가지 + 시작 버튼이 320×640에서도 스크롤 없이 */
+.intro-title { font-size: clamp(30px, 9.6vw, 42px); margin-top: 18px; white-space: nowrap; }
+.intro-lede { font-size: 15px; line-height: 1.5; max-width: 330px; margin: 10px auto 0; padding: 0 16px; color: var(--ink); font-weight: 500; }
+.intro-steps { list-style: none; margin: 16px auto 0; padding: 0 12px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; max-width: 420px; width: 100%; box-sizing: border-box; }
+.intro-steps li { position: relative; display: grid; justify-items: center; gap: 5px; font-size: 12.5px; line-height: 1.3; color: var(--ink); font-weight: 600; }
+.intro-steps li + li::before { content: "›"; position: absolute; left: -6px; top: 9px; font-size: 18px; line-height: 1; color: var(--muted); font-weight: 400; }
+.intro-steps .g-ico { width: 40px; height: 40px; border-radius: 50%; background: var(--surface); color: var(--accent); display: grid; place-items: center; box-shadow: 0 2px 8px rgba(21, 32, 26, 0.10); }
+.intro-steps .g-ico svg { width: 22px; height: 22px; }
+.intro-steps .g-txt b { color: var(--accent); margin-right: 1px; }
+.intro-pill { font-size: 12px; }
+@media (max-width: 360px) { .intro-pill { font-size: 11px; padding: 5px 8px; } .intro-brand { font-size: 14px; } }
+/* 낮은 화면(320×640 등): 그림과 여백을 줄여 시작 버튼까지 한 화면에 */
+@media (max-height: 720px) {
+  .intro-inner { padding-top: 12px; }
+  .intro-title { margin-top: 10px; font-size: clamp(28px, 9vw, 36px); }
+  .intro-lede { font-size: 14px; margin-top: 6px; }
+  .intro-steps { margin-top: 10px; }
+  .intro-steps .g-ico { width: 34px; height: 34px; }
+  .intro-steps .g-ico svg { width: 19px; height: 19px; }
+  .intro-steps li { font-size: 12px; gap: 3px; }
+  .skyline { margin-top: 6px; }
+  .intro-panel { padding-top: 12px; gap: 6px; }
+  .intro-panel .btn.big { height: 50px; }
+  .intro-panel .btn.big.ghost { height: 40px; }
+  .intro-ground { padding: 4px 0 5px; font-size: 10.5px; }
+}
+
+/* 도움말 버튼: 상단바 오른쪽, 지도 위('나무 등록' 옆) */
+.topbar-end { justify-self: end; display: flex; }
+.help-btn { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 13.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; padding: 8px 6px; border-radius: 8px; cursor: pointer; }
+.help-btn:hover { background: var(--accent-soft); }
+.help-btn .g-ico, .map-help .g-ico { display: inline-grid; place-items: center; }
+.help-btn svg { width: 20px; height: 20px; }
+.map-help { width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--surface); color: var(--accent); box-shadow: var(--shadow-float); display: inline-grid; place-items: center; cursor: pointer; padding: 0; flex: 0 0 auto; pointer-events: auto; }
+.map-top > .map-help { justify-self: end; }
+.map-help svg { width: 22px; height: 22px; }
+
+/* 안내·도움말 창 */
+.guide-dialog .dialog-form { gap: 12px; }
+.guide-dialog .eyebrow { margin: 0 0 -6px; }
+.guide-dialog h3 { font-size: 15px; font-family: var(--font-body); font-weight: 700; margin-top: 4px; }
+.guide-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.guide-steps li { display: flex; gap: 12px; align-items: flex-start; }
+.guide-steps .g-ico { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+.guide-steps .g-ico svg { width: 20px; height: 20px; }
+.guide-steps b { font-size: 15px; }
+.guide-steps p { margin: 1px 0 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.45; }
+.guide-dialog .btn.big { width: 100%; display: flex; gap: 8px; }
+.guide-dialog .btn.big .g-ico { display: inline-grid; }
+.guide-dialog .btn.big svg { width: 20px; height: 20px; }
+.guide-foot { align-items: center; }
+.link-btn { border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 13.5px; text-decoration: underline; text-underline-offset: 3px; padding: 8px 4px; cursor: pointer; }
+.guide-tabs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.guide-tabs a { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 10px; align-items: center; padding: 8px 10px; border-radius: 12px; background: var(--bg); color: var(--ink); text-decoration: none; }
+.guide-tabs .g-ico { grid-row: span 2; width: 34px; height: 34px; border-radius: 50%; background: var(--surface); color: var(--accent); display: grid; place-items: center; }
+.guide-tabs .g-ico svg { width: 19px; height: 19px; }
+.guide-tabs b { font-size: 14.5px; }
+.guide-tabs span:not(.g-ico) { font-size: 12.5px; color: var(--ink-2); }
+
+/* 지도 빈 시트의 다음 행동 */
+.sheet-d > .btn.big { display: flex; gap: 8px; width: 100%; }
+.sheet-d > .btn.big svg { width: 20px; height: 20px; }
+
+/* 전주 현황: 전주 가로수 전체 연간 흡수량을 맨 위 큰 타일로(오늘 흡수량과 구분) */
+.annual-hero { background: var(--accent); color: var(--accent-ink); border-radius: 16px; padding: 16px 18px 14px; display: grid; gap: 2px; }
+.annual-hero .k { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.annual-hero .est { font-size: 11.5px; font-weight: 600; border: 1px solid currentColor; border-radius: 999px; padding: 0 7px; opacity: 0.9; }
+.annual-hero .v { font-family: var(--font-display); font-size: clamp(38px, 12vw, 52px); font-weight: 650; line-height: 1.1; }
+.annual-hero .v small { font-family: var(--font-body); font-size: 15px; font-weight: 600; margin-left: 6px; }
+.annual-hero .sub { color: inherit; opacity: 0.88; font-size: 12.5px; }
+
+/* 나무 프로필: 자주 하는 행동 한 줄 */
+.quick-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.quick { display: grid; justify-items: center; align-content: center; gap: 2px; min-height: 62px; padding: 8px 2px; border: 1.5px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.quick span { font-size: 21px; line-height: 1.1; }
+.quick.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.quick:hover { border-color: var(--accent); }
+@media (max-width: 350px) { .quick { font-size: 12px; letter-spacing: -0.02em; } }
+.actions.more { margin-top: -4px; }
+.actions.more .btn { height: 34px; font-size: 13.5px; }
+.empty-next { display: flex; justify-content: center; margin-top: -12px; }

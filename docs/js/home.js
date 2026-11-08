@@ -16,6 +16,7 @@ import { renderProfileScreen } from "./profile.js";
 import { initFriends, attachFriendsMap, syncFriends, focusFriend } from "./friends.js";
 import * as reg from "./register.js";
 import { photoField } from "./camera.js";
+import * as guide from "./guide.js";
 
 const $ = sel => document.querySelector(sel);
 const nf = (v, d = 0) => Number(v).toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -60,6 +61,7 @@ async function main() {
     throw e;
   }
   renderIntro();
+  guide.mountHelp();
   const treesReady = loadJSON("data/trees.json").then(t => { T = t; });
   fetchWeather(JEONJU.lon, JEONJU.lat).then(w => { weather = w; renderWeatherChips(); }).catch(() => { /* 날씨 없이도 동작 */ });
   for (const b of document.querySelectorAll(".tabbar a")) b.addEventListener("click", () => window.scrollTo(0, 0));
@@ -347,13 +349,14 @@ function renderIntro() {
   box.replaceChildren(
     el("div", { class: "intro-sky" }),
     el("div", { class: "intro-inner" },
-      el("div", { class: "intro-top" }, el("span", { class: "intro-brand" }, svg(LOGO_SVG), "우리동네가로수"), el("span", { class: "intro-pill" }, "전주시 · 시민참여형 가로수 돌봄")),
-      el("h1", { class: "intro-title" }, "우리동네", el("br"), "가로수"),
-      el("p", { class: "intro-lede" }, `전주 가로수 ${nf(total)}그루가 한 해 약 ${nf(seq[1])}톤의 CO₂를 들이마셔요. 집 앞 한 그루와 친구가 되어 돌보고 기록해요.`),
+      el("div", { class: "intro-top" }, el("span", { class: "intro-brand", "aria-hidden": "true" }, svg(LOGO_SVG)), el("span", { class: "intro-pill" }, `전주 가로수 ${nf(total)}그루 · 연 ${nf(seq[1])}t CO₂`)),
+      el("h1", { class: "intro-title" }, "우리동네 가로수"),
+      el("p", { class: "intro-lede" }, guide.SERVICE_LINE),
+      guide.introSteps(),
       el("div", { class: "intro-spacer" }),
       skyline, ground,
       el("div", { class: "intro-panel" },
-        el("a", { class: "btn big", href: "#map?loc=1" }, svg(PIN_SVG), "내 위치 보기"),
+        el("a", { class: "btn big", href: "#map?loc=1" }, svg(PIN_SVG), "시작하기 · 내 주변 나무 찾기"),
         el("a", { class: "btn big ghost", href: state.my.length ? "#sns" : "#city" }, state.my.length ? `내 나무 ${state.my.length}그루 보기` : "전주 현황 보기"),
         el("p", { class: "intro-foot" }, "탄소 수치는 공공데이터로 추정한 값(검증 전)이에요 · ", el("a", { href: "map.html" }, "연구용 전체 지도")))));
 }
@@ -370,12 +373,11 @@ function renderCity() {
   const win = seasonWindow(P), doy = dayOfYear(today);
   const inSeason = doy >= win.start && doy <= win.end;
   const fmt = v => (v >= 1000 ? `${nf(v / 1000, 2)} t` : `${nf(v, 0)} kg`);
-  const live = el("div", { class: "hero-num num" }, fmt(todayKg));
-  const liveSub = el("div", { class: "hero-sub" });
+  const liveSub = el("span", {});
   const tick = () => {
     const now = new Date();
     const frac = Math.min(1, Math.max(0, (now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600 - 6) / 13)); // 06–19시 낮 동안 고르게
-    liveSub.textContent = inSeason ? `오늘 하루 예상치 · 지금까지 약 ${fmt(todayKg * frac)} (낮 06–19시에 고르게 흡수한다고 가정)` : "겨울에는 잎이 없어 흡수량을 0으로 봅니다";
+    liveSub.textContent = inSeason ? `지금까지 약 ${fmt(todayKg * frac)} (낮 06–19시 가정, 추정)` : "잎이 없는 철이라 0으로 봐요(추정)";
   };
   tick();
   tickTimer = setInterval(tick, 1000);
@@ -400,12 +402,16 @@ function renderCity() {
       el("b", {}, s.species), el("span", { class: "num" }, `${nf(s.count)}그루`), el("span", { class: "sub num" }, `오늘 ${dayKg >= 1000 ? nf(dayKg / 1000, 2) + "t" : nf(dayKg) + "kg"}`));
   }));
   box.replaceChildren(el("div", { class: "page-inner" },
-    el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "2단계 · 전주 가로수 지금"), el("h1", {}, "오늘 전주 가로수가 들이마시는 CO₂")), weatherChip()),
-    el("div", { class: "hero" }, live, liveSub),
+    el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "전주 현황"), el("h1", {}, "전주 가로수가 흡수하는 CO₂")), weatherChip()),
+    // 과업 '전주 가로수 전체의 연간 탄소 흡수량 찾기'가 가장 어려웠다: 맨 위에 큰 타일로, 오늘 흡수량과 따로
+    el("section", { class: "annual-hero", "aria-label": "전주 가로수 전체 연간 탄소 흡수량" },
+      el("div", { class: "k" }, "전주 가로수 전체 · 연간 탄소 흡수량", el("span", { class: "est" }, "추정")),
+      el("div", { class: "v num" }, nf(S.totals.seq_t[1]), el("small", {}, "t CO₂/년")),
+      el("div", { class: "sub" }, `가로수 ${nf(S.quality.on_map)}그루가 한 해 동안 · 80% 범위 ${nf(lo)}–${nf(hi)} t`)),
     el("div", { class: "kpis tight" },
-      kpi("가로수", nf(S.quality.on_map), "그루", `산림청 2025-08-26판, 전주 경계 안${osmCount ? ` · 지도엔 OSM 나무 ${nf(osmCount)}그루(흉고 미상) 더` : ""}`),
+      kpi("오늘 하루 흡수", ...fmt(todayKg).split(" "), liveSub),
       kpi("올해 누적 흡수", nf(yearKg / 1000, 0), "t", `1월 1일부터 오늘까지(추정)`),
-      kpi("한 해 흡수", nf(S.totals.seq_t[1]), "t/년", `80% 범위 ${nf(lo)}–${nf(hi)} t`),
+      kpi("가로수", nf(S.quality.on_map), "그루", `산림청 2025-08-26판, 전주 경계 안${osmCount ? ` · 지도엔 OSM 나무 ${nf(osmCount)}그루(흉고 미상) 더` : ""}`),
       kpi("CO₂ 저장량", nf(S.totals.storage_t[1]), "t", "줄기·가지·뿌리에 쌓인 양")),
     el("section", { class: "card" }, el("div", { class: "k" }, "하루 흡수량은 계절을 따라 변해요"), spark,
       el("p", { class: "limit" }, `연간 흡수량을 서리 없는 ${win.length}일(4월 ${win.start - 90}일쯤부터 10월 말)에 나눠 배분한 가정값입니다. 한여름에 가장 많고 겨울에는 0입니다.`)),
@@ -450,27 +456,33 @@ function renderMap() {
       el("div", { class: "map-top" }, el("div", { class: "map-search", id: "mapSearch" }, form, locateBtn), el("div", { class: "legend-chips", id: "legend" })),
       el("div", { class: "map-status", id: "mapStatus", hidden: true }),
       el("div", { class: "sheet-d empty", id: "mapSheet" }, el("span", { class: "handle" }), el("div", { class: "head" }, el("h2", {}, "어디의 가로수를 볼까요?")),
-        el("p", { class: "caption" }, "검색창에 동·도로·주소를 넣거나 ⌖ 를 눌러 내 위치 주변을 보세요.")));
+        el("p", { class: "caption" }, "검색창에 동·도로·주소를 넣거나 ⌖ 를 눌러 내 위치 주변을 보세요."),
+        el("button", { type: "button", class: "btn big", onclick: findByGPS }, svg(LOCATE_SVG), "내 주변 나무 보기")));
     initFriends({ state, T, S, FORM, season, selectTree, runNear, backToList, toast });
     reg.mountMapUI(box);
+    guide.mountMapHelp(box);
     ensureBigMap();
     const q = params.get("q");
     if (params.get("tree") && focusFriend(params.get("tree"))) { /* #map?tree=<id>: 그 나무를 가운데 두고 카드 */ }
     else if (q) { input.value = q; findByText(q); }
-    else if (params.get("loc")) findByGPS();
+    else if (params.get("loc")) locateWithGuide();
     else if (state.near.center) runNear();
     else if (state.my.length) { const t = state.my[0]; choosePlace({ kind: "tree", name: t.name, lon: t.lon, lat: t.lat, label: `${t.name} 주변` }); }
+    else mapGuideFirst();
     return;
   }
   syncFriends();
   const q = params.get("q");
   if (params.get("tree")) requestAnimationFrame(() => { state.near.map?.resize(); focusFriend(params.get("tree")); });
   else if (q) { $("#addr").value = q; findByText(q); }
-  else if (params.get("loc")) findByGPS();
+  else if (params.get("loc")) locateWithGuide();
   // 다른 화면에서 친구를 맺고 돌아오면 열려 있던 카드를 지금 상태로 다시 그린다
   else if (state.near.picked !== null && state.near.picked !== undefined) selectTree(state.near.picked);
   requestAnimationFrame(() => state.near.map?.resize());
 }
+// 처음 쓰는 사람(내 나무 없음)에게는 지도 안내를 먼저 띄우고, 위치 찾기는 안내의 버튼으로 한다
+const mapGuideFirst = () => guide.mapGuide({ hasTrees: state.my.length > 0, located: Boolean(state.near.center), onLocate: findByGPS, onSearch: () => $("#addr")?.focus() });
+function locateWithGuide() { if (!mapGuideFirst()) findByGPS(); }
 async function ensureBigMap() {
   if (state.near.map || state.near.mapLoading) return state.near.map;
   state.near.mapLoading = true;
@@ -744,7 +756,7 @@ async function renderSNS() {
   if (!state.my.length) {
     const sample = S.species[0];
     box.replaceChildren(el("div", { class: "page-inner" },
-      el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "4단계 · 나무 SNS"), el("h1", {}, "내 나무")), weatherChip()),
+      el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "나무 SNS"), el("h1", {}, "내 나무")), weatherChip()),
       el("div", { class: "empty-state" }, svg(treeSVG({ species: sample.species, info: S.species_info[sample.species], dbh: sample.median_dbh, form: FORM, season, mood: "sad", size: 150 })),
         el("p", {}, "아직 친구가 된 나무가 없어요. 우리 동네 가로수를 찾아 첫 친구를 맺어 보세요."),
         el("a", { class: "btn big", href: "#map" }, "우리동네 나무 찾기"))));
@@ -764,9 +776,10 @@ async function renderSNS() {
     const mood = treeMood(t, postsOf(t.id));
     return el("a", { class: "my-tree", href: `#tree/${encodeURIComponent(t.id)}` }, figure(t, { size: 120, mood }), el("b", {}, t.name), el("span", { class: "sub" }, `${t.species} · ${MOOD_KO[mood]}`));
   }), el("a", { class: "my-tree add", href: "#map" }, el("span", { class: "add-box" }, "+"), el("b", {}, "친구 추가")));
-  const feed = el("div", { class: "feed" }, ...(state.posts.length ? state.posts.map(postCard) : [el("p", { class: "empty" }, "아직 기록이 없어요. 나무를 눌러 돌봄을 기록하거나, 내 프로필에서 생활 실천을 기록해 보세요.")]));
+  const feed = el("div", { class: "feed" }, ...(state.posts.length ? state.posts.map(postCard) : [el("p", { class: "empty" }, "아직 기록이 없어요. 돌봄이나 생활 실천을 기록하면 여기에 쌓여요."),
+    el("div", { class: "empty-next" }, el("button", { type: "button", class: "btn", onclick: () => { go(`#tree/${encodeURIComponent(state.my[0].id)}`); openActivity(state.my[0], "care"); } }, `🌳 ${state.my[0].name} 돌봄 기록하기`))]));
   box.replaceChildren(el("div", { class: "page-inner" },
-    el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "4단계 · 나무 SNS"), el("h1", {}, "내 나무")), weatherChip()),
+    el("header", { class: "screen-head" }, el("div", {}, el("p", { class: "eyebrow" }, "나무 SNS"), el("h1", {}, "내 나무")), weatherChip()),
     stories,
     el("div", { class: "kpis tight" },
       kpi("함께한 뒤 나무가 흡수", ...mass(totals.year), "친구 맺은 날부터(추정)"),
@@ -827,19 +840,15 @@ async function renderTree(id) {
         el("div", { class: "sub" }, `${t.species} · ${t.road}${t.dong ? " · " + t.dong : ""}`),
         el("div", { class: "sub" }, `친구 ${days}일째 · ${lv.name} · ${nf(t.points || 0)}점`),
         el("div", { class: "mood" }, MOOD_KO[mood]))),
-    el("div", { class: "actions" },
-      el("a", { class: "btn", href: `#chat/${encodeURIComponent(id)}` }, "💬 메시지"),
-      el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care") }, "🌳 돌봄 기록"),
-      el("a", { class: "btn ghost", href: `#profile?tree=${encodeURIComponent(id)}` }, "🌱 생활 실천"),
-      el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care", "observe") }, "📷 사진 올리기"),
-      el("a", { class: "btn ghost", href: `#photo/${encodeURIComponent(id)}` }, "🖼️ 사진·캐릭터·AR"),
+    // 자주 하는 행동은 위쪽 한 줄 빠른 버튼으로(파일럿: '복잡하다'·'비효율적' 점수가 가장 낮았다)
+    el("nav", { class: "quick-row", "aria-label": "빠른 기록" },
+      el("button", { type: "button", class: "quick primary", onclick: () => openActivity(t, "care") }, el("span", { "aria-hidden": "true" }, "🌳"), "돌봄 기록"),
+      el("button", { type: "button", class: "quick", onclick: () => openActivity(t, "care", "observe") }, el("span", { "aria-hidden": "true" }, "📷"), "사진"),
+      el("a", { class: "quick", href: `#chat/${encodeURIComponent(id)}` }, el("span", { "aria-hidden": "true" }, "💬"), "대화"),
+      el("a", { class: "quick", href: `#profile?tree=${encodeURIComponent(id)}` }, el("span", { "aria-hidden": "true" }, "🌱"), "생활 실천")),
+    el("div", { class: "actions more" },
+      el("a", { class: "btn ghost small", href: `#photo/${encodeURIComponent(id)}` }, "🖼️ 사진·캐릭터·AR"),
       t.dbh ? view3dButton(t) : null),
-    el("section", { class: "card where" }, el("div", { class: "k" }, "이 나무가 서 있는 곳"),
-      el("div", { class: "minimap small", id: "treeMap", role: "region", "aria-label": `${t.name} 위치 지도` }),
-      el("div", { class: "row" }, el("a", { class: "btn small", id: "viewOnMap", href: `#map?tree=${encodeURIComponent(id)}` }, "지도에서 보기")),
-      t.user ? reg.identRows(t) : identRows(t), mapLinks(t, t.name),
-      el("p", { class: "limit" }, t.user ? "시민이 직접 등록한 위치예요(미검증). 산림청 가로수 대장에는 없는 나무예요." : "공공데이터의 좌표와 관리번호예요. 현장에서 같은 나무인지 확인하려면 관리번호 표찰(있는 경우)과 도로·구간을 함께 보세요.")),
-    coGuardianBlock(t),
     el("div", { class: "kpis tight" },
       kpi("오늘 흡수", ...uptake(todayKg), "이 나무, 오늘 하루(추정)"),
       kpi("함께한 뒤 흡수", ...uptake(yearKg), `${new Date(t.since).toLocaleDateString("ko-KR")}부터`),
@@ -851,8 +860,16 @@ async function renderTree(id) {
     el("section", { class: "card" }, el("div", { class: "k" }, "한 해 CO₂ 흡수(추정)"),
       el("div", { class: "big num" }, t.seq[1] !== null ? `${kg(t.seq[0])}~${kg(t.seq[2])}` : t.dbh || t.user ? "-" : "흉고 미상", el("small", {}, t.seq[1] !== null || t.dbh || t.user ? "kg/년" : "")),
       el("p", { class: "limit" }, `${t.user && !t.dbh ? "둘레를 재서 기록하면(돌봄 기록 → 둘레 재기) 흡수량을 계산할 수 있어요. " : ""}도시 생육 보정은 해외 기준을 썼고 국내 도시수목 상대생장식이 없어 대리식을 적용했습니다.${t.block ? " 이 구간의 흉고는 대표값으로 보여 범위를 넓게 잡았습니다." : ""}${measured ? ` 내가 잰 둘레 ${nf(measured.circ)}cm(흉고 ${nf(circumferenceToDbh(measured.circ), 1)}cm)가 기록되어 있어요.` : ""}`)),
+    coGuardianBlock(t),
+    // 위치·식별 정보는 처음 확인할 때만 필요해 오늘 흡수량·부탁 아래로 내렸다
+    el("section", { class: "card where" }, el("div", { class: "k" }, "이 나무가 서 있는 곳"),
+      el("div", { class: "minimap small", id: "treeMap", role: "region", "aria-label": `${t.name} 위치 지도` }),
+      el("div", { class: "row" }, el("a", { class: "btn small", id: "viewOnMap", href: `#map?tree=${encodeURIComponent(id)}` }, "지도에서 보기")),
+      t.user ? reg.identRows(t) : identRows(t), mapLinks(t, t.name),
+      el("p", { class: "limit" }, t.user ? "시민이 직접 등록한 위치예요(미검증). 산림청 가로수 대장에는 없는 나무예요." : "공공데이터의 좌표와 관리번호예요. 현장에서 같은 나무인지 확인하려면 관리번호 표찰(있는 경우)과 도로·구간을 함께 보세요.")),
     el("h2", {}, `${t.name}의 기록 ${posts.length}건`),
-    el("div", { class: "feed" }, ...(posts.length ? posts.map(postCard) : [el("p", { class: "empty" }, "첫 기록을 남겨 보세요.")])),
+    el("div", { class: "feed" }, ...(posts.length ? posts.map(postCard) : [el("p", { class: "empty" }, "첫 기록을 남겨 보세요."),
+      el("div", { class: "empty-next" }, el("button", { type: "button", class: "btn", onclick: () => openActivity(t, "care") }, "🌳 돌봄 기록하기"))])),
     el("div", { class: "row end" }, el("button", { type: "button", class: "btn ghost small danger", onclick: () => unfriend(t) }, "친구 끊기"))));
   const mapBox = $("#treeMap");
   createMiniMap(mapBox, { center: [t.lon, t.lat], zoom: 18, token }).then(mm => {
