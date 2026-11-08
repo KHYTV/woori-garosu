@@ -77,6 +77,11 @@ export const db = {
     await tx("posts", "readwrite", s => wrap(s.put(post)));
     return post;
   },
+  async deletePost(pid) {
+    const d = await open();
+    if (!d) { const m = mem(); m.posts = m.posts.filter(p => p.pid !== pid); return; }
+    await tx("posts", "readwrite", s => wrap(s.delete(pid)));
+  },
   async postsFor(treeId) {
     const d = await open();
     const rows = d ? await tx("posts", "readonly", s => wrap(s.index("treeId").getAll(treeId))) : mem().posts.filter(p => p.treeId === treeId);

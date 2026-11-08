@@ -1,0 +1,17 @@
+/* 기록: 나무 메모(관찰 일기), 실천 사진 인증, 감축량 '추정' 도움말 (docs/js/records.js) */
+.post.memo { border-style: dashed; border-color: color-mix(in srgb, var(--warning) 55%, var(--line)); background: color-mix(in srgb, var(--warning) 6%, var(--surface)); }
+.post .memo-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.55; }
+.badge.memo { background: color-mix(in srgb, var(--warning) 30%, var(--surface)); color: var(--ink); }
+.badge.proof { background: #1f5f8b; color: #fff; }
+.memo-tools { margin-left: auto; display: inline-flex; gap: 6px; }
+.memo-tools .btn.small { height: 28px; padding: 0 10px; font-size: 12.5px; box-shadow: none; }
+.memo-del { justify-self: start; }
+.feed-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 10px; }
+.feed-filter .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.proof-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); margin: -4px 0 8px; }
+.est-info { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 2px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.est-help p { margin: 0; }
+.est-help .est-lead { font-weight: 600; }
+.est-compare { display: grid; gap: 4px; margin: 0; }
+.est-compare dt { font-weight: 600; margin-top: 6px; }
+.est-compare dd { margin: 0; color: var(--ink-2); font-size: 14px; }
