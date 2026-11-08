@@ -1,7 +1,8 @@
 // 동네 전체 보기: 행정동(법정동) 경계를 큰 지도에 그리고 경계 안 모든 가로수를 점으로 보여 준다.
 // 경계는 docs/data/dongs.geojson(pipeline/export_dongs.py). 지도 레이어·소스 id는 모두 area- 접두어.
 // home.js의 choosePlace(place)가 openArea → showArea 순서로 부른다.
-import { treeSVG, hashSeed, signatureColor } from "./characters.js";
+import { treeSVG, hashSeed, signatureColor, isConifer } from "./characters.js";
+import { addTreeLayers } from "./minimap.js";
 import { distanceM } from "./geo.js";
 
 const FIRST = 30, MORE = 50;            // 목록: 처음 30그루, '더 보기'마다 50그루
@@ -139,8 +140,9 @@ function injectCSS() {
 const colorOf = (sp, ctx) => signatureColor(sp, ctx.S.species_info[sp]);
 function treePoints(view, T, ctx) {
   const colors = new Map(view.counts.map(([sp]) => [sp, colorOf(sp, ctx)]));
+  const cones = new Set(view.counts.map(([sp]) => sp).filter(sp => isConifer(sp, ctx.S.species_info[sp])));
   return { type: "FeatureCollection", features: view.idx.map(i => ({ type: "Feature", geometry: { type: "Point", coordinates: [T.lon[i], T.lat[i]] },
-    properties: { i, c: colors.get(T.species[T.sp[i]]) } })) };
+    properties: { i, c: colors.get(T.species[T.sp[i]]), cone: cones.has(T.species[T.sp[i]]) } })) };
 }
 function ensureLayers(mm, token) {
   const map = mm.map;
@@ -154,15 +156,16 @@ function ensureLayers(mm, token) {
   map.addLayer({ id: "area-casing", type: "line", source: "area-boundary", paint: { "line-color": "#fff", "line-width": 5, "line-opacity": 0.8 } }, before);
   map.addLayer({ id: "area-line", type: "line", source: "area-boundary", paint: { "line-color": accent, "line-width": 2.5 } }, before);
   // 수천 그루라 DOM 마커 대신 circle 레이어. 멀리서는 작은 점, 가까이 가면 기존 나무 점과 같은 크기
-  map.addLayer({ id: "area-trees", type: "circle", source: "area-trees", paint: {
-    "circle-color": ["get", "c"],
-    "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 1.4, 13, 2.2, 15, 3.6, 17, 5.5, 18, 6],
-    "circle-stroke-color": "#fff",
-    "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 13, 0, 15, 0.8, 17, 2],
-    "circle-opacity": 0.92 } }, before);
-  map.on("click", "area-trees", e => { const f = e.features?.[0]; if (f && active?.ctx) active.ctx.onSelect(Number(f.properties.i)); });
-  map.on("mouseenter", "area-trees", () => { map.getCanvas().style.cursor = "pointer"; });
-  map.on("mouseleave", "area-trees", () => { map.getCanvas().style.cursor = ""; });
+  // 침엽수는 같은 색 세모(area-trees-cone)
+  const layers = addTreeLayers(map, { id: "area-trees", source: "area-trees", color: ["get", "c"], opacity: 0.92,
+    radius: ["interpolate", ["linear"], ["zoom"], 11, 1.4, 13, 2.2, 15, 3.6, 17, 5.5, 18, 6],
+    strokeWidth: ["interpolate", ["linear"], ["zoom"], 13, 0, 15, 0.8, 17, 2],
+    iconSize: ["interpolate", ["linear"], ["zoom"], 11, 0.22, 13, 0.32, 15, 0.5, 17, 0.85, 18, 0.95] }, before);
+  for (const id of layers) {
+    map.on("click", id, e => { const f = e.features?.[0]; if (f && active?.ctx) active.ctx.onSelect(Number(f.properties.i)); });
+    map.on("mouseenter", id, () => { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", id, () => { map.getCanvas().style.cursor = ""; });
+  }
 }
 function fitArea(view) {
   const mm = view.mm;
@@ -172,6 +175,7 @@ function fitArea(view) {
   const box = mm.map.getContainer().getBoundingClientRect(), sheet = document.getElementById("mapSheet")?.getBoundingClientRect();
   const h = box.height || 600, under = sheet ? box.bottom - sheet.top : h * 0.5;
   const bottom = Math.round(Math.min(Math.max(under + 12, 60), h - 260));
+  mm.map.setPadding({ top: 0, right: 0, bottom: 0, left: 0 });   // 앞선 easeTo의 padding이 남아 있으면 fit이 어긋난다
   mm.map.fitBounds([[w, s], [e, n]], { padding: { top: 120, bottom, left: 24, right: 24 }, maxZoom: 17, duration: 0 });
 }
 // 큰 지도에 경계 + 경계 안 모든 나무
@@ -195,7 +199,7 @@ export function clearArea(mm) {
 
 function legend(view, ctx) {
   document.getElementById("legend")?.replaceChildren(...view.counts.slice(0, 3)
-    .map(([sp, n]) => el("span", {}, el("i", { style: `background:${colorOf(sp, ctx)}` }), `${sp} ${nf(n)}`)));
+    .map(([sp, n]) => el("span", {}, el("i", { class: isConifer(sp, ctx.S.species_info[sp]) ? "cone" : null, style: `background:${colorOf(sp, ctx)}` }), `${sp} ${nf(n)}`)));
 }
 function row(i, view, T, ctx) {
   const sp = T.species[T.sp[i]], info = ctx.S.species_info[sp], id = T.id[i], dbh = T.dbh[i];
@@ -237,7 +241,7 @@ function renderSheet(view, focus = null) {
     el("div", { class: "area-bar", role: "img", "aria-label": `수종 비율: ${view.counts.slice(0, 5).map(([sp, n]) => `${sp} ${nf(n)}그루`).join(", ")}` },
       ...top.map(([sp, n]) => el("i", { style: `width:${pct(n)};background:${colorOf(sp, ctx)}` }))),
     el("div", { class: "area-species" },
-      ...top.map(([sp, n]) => el("span", {}, el("i", { style: `background:${colorOf(sp, ctx)}` }), sp, el("b", {}, nf(n)))),
+      ...top.map(([sp, n]) => el("span", {}, el("i", { class: isConifer(sp, ctx.S.species_info[sp]) ? "cone" : null, style: `background:${colorOf(sp, ctx)}` }), sp, el("b", {}, nf(n)))),
       rest.length ? el("span", {}, `그 밖 ${rest.length}종`, el("b", {}, nf(restN))) : null),
     el("p", { class: "caption" }, `${kindText} 경계 안 · 동 가운데에서 가까운 순`),
     list,

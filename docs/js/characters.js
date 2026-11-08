@@ -24,13 +24,18 @@ const LEAF = { ginkgo: "#6fae52", cherry: "#4e8c48", zelkova: "#4f8f4b", plane: 
 const SPRING = { ginkgo: "#9ccc65", cherry: "#f3c3d1", fringe: "#f4f2e6", magnolia: "#f7f1ea", willow: "#b7d57a", locust: "#8fc06c" };
 const BLOSSOM_DOT = { cherry: "#fde8ef", fringe: "#ffffff", magnolia: "#ffffff", locust: "#f6f3e8", goldenrain: "#f2c230" };
 const EVERGREEN = new Set(["juniper", "cedar", "pine"]);
-// 디자인 후보 E의 마스코트 상징색: 계절과 상관없이 수종을 알아보는 색
-export const SIGNATURE = { 벚나무: "#E4572E", 은행나무: "#F2B705", 느티나무: "#4F9D5D", 이팝나무: "#E8EFE4", 단풍나무: "#B23A48", 중국단풍: "#D4572A",
-  양버즘나무: "#5A9A4E", 메타세쿼이아: "#B5652D", 회화나무: "#5F9E55", 히말라야시다: "#39694A", 팽나무: "#4F8F4B", 소나무: "#2F6B3F", 감나무: "#EF7B2B",
-  참나무: "#8A6A3A", 버드나무: "#86B55E", 삼나무: "#4F8A5A", 아까시나무: "#68A35A", 잎갈나무: "#C8962E", 모감주나무: "#F2C230", 향나무: "#2F5D3A", 목련: "#F3E9E4", 기타: "#5A8F4E" };
+// 디자인 후보 E의 마스코트 상징색: 계절과 상관없이 수종을 알아보는 색(지도 점·목록 아바타·캐릭터 공통).
+// 지도에 함께 많이 나오는 수종끼리(300m 칸 안 동시 출현 기준) OKLab ΔE와 색각 이상(적·녹) 시뮬레이션으로 골랐다.
+// 초록은 느티(중간)·팽/소나무(짙음) 정도만 남기고 회화 보라 · 히말라야시다 하늘파랑 · 양버즘 황갈 · 버드 민트 · 기타 회색으로 나눴다.
+// 침엽수(isConifer)는 지도에서 세모로 그려 색이 비슷한 쌍(메타↔느티 등)을 모양으로도 가른다. tests/web_palette.mjs가 확인한다.
+export const SIGNATURE = { 벚나무: "#E3609F", 은행나무: "#F2B705", 느티나무: "#2A8540", 이팝나무: "#E8EFE4", 단풍나무: "#9C1F2E", 중국단풍: "#F07A36",
+  양버즘나무: "#AE8F5E", 메타세쿼이아: "#A85A28", 회화나무: "#8B6CC9", 히말라야시다: "#2F8FD6", 팽나무: "#1F5A35", 소나무: "#2C5E3E", 감나무: "#F59E3C",
+  참나무: "#7A5636", 버드나무: "#62C2A2", 삼나무: "#2D6E73", 아까시나무: "#9BB84A", 잎갈나무: "#C8962E", 모감주나무: "#F2C230", 향나무: "#2F5D3A", 목련: "#F3E9E4", 기타: "#50554E" };
 export const WIDE = new Set(["느티나무", "팽나무", "회화나무", "참나무", "양버즘나무"]);
 export function signatureColor(species, info) { return SIGNATURE[species] || LEAF[archetype(species, info)] || "#5a8f4e"; }
 const CONE_TYPES = new Set(["conifer", "juniper", "cedar", "pine"]);
+/** 침엽수(메타세쿼이아·히말라야시다·소나무 등): 지도 점을 세모로 그린다 */
+export function isConifer(species, info) { return CONE_TYPES.has(archetype(species, info)); }
 
 // 마스코트(디자인 후보 E): 벌어진 밑동과 뿌리, 줄기에서 갈라지는 가지 3개, 둥근 덩어리 여러 개의 수관(아래는 짙게)
 function mascot(L, color, wide) {

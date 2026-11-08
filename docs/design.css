@@ -61,11 +61,24 @@ body.intro-mode .intro-panel { padding-bottom: 16px; }
 .sq-btn:disabled { opacity: 0.5; }
 .legend-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .legend-chips span { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--ink); background: var(--surface); padding: 5px 9px; border-radius: 999px; box-shadow: 0 2px 8px rgba(21, 32, 26, 0.10); }
-.legend-chips i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.legend-chips i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(21, 32, 26, 0.22); }
+/* 침엽수는 지도에서처럼 세모(점 색이 비슷한 수종을 모양으로도 가른다) */
+.legend-chips i.cone, .area-species i.cone { width: 11px; height: 10px; border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); box-shadow: none; }
 .map-pill { display: inline-flex; align-items: center; height: 48px; padding: 0 16px; background: var(--surface); border-radius: var(--r-sm); font-size: 15px; font-weight: 600; box-shadow: var(--shadow-float); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .map-status { position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%); z-index: 2; background: var(--surface); border-radius: 999px; padding: 8px 14px; font-size: 13px; box-shadow: var(--shadow-float); }
 .sheet-d { position: absolute; left: 0; right: 0; bottom: 0; max-height: 58%; background: var(--surface); border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: 0 -6px 24px rgba(21, 32, 26, 0.12); padding: 10px 16px 12px; display: flex; flex-direction: column; gap: 10px; z-index: 4; overflow-y: auto; }
-.sheet-d .handle { align-self: center; width: 40px; height: 5px; border-radius: 999px; background: var(--line); flex: 0 0 auto; }
+/* 손잡이: 시트 위 44px 띠 전체가 끌기·누르기 영역(docs/js/sheet.js). 내용을 내려도 위에 붙어 있다 */
+.sheet-d .handle { position: sticky; top: -10px; z-index: 2; align-self: stretch; flex: 0 0 auto; height: 44px; margin: -10px -16px -10px; background: var(--surface);
+  cursor: grab; touch-action: none; -webkit-tap-highlight-color: transparent; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+.sheet-d .handle::before { content: ""; position: absolute; left: 50%; top: 10px; width: 44px; height: 5px; margin-left: -22px; border-radius: 999px; background: var(--muted); opacity: 0.55; }
+.sheet-d .handle:focus-visible { outline: 2.5px solid var(--accent); outline-offset: -3px; }
+.sheet-d.sheet-dragging { overflow: hidden; }
+.sheet-d.sheet-dragging .handle { cursor: grabbing; }
+.sheet-d.sheet-anim { transition: height 0.26s cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* 접힌 시트: 손잡이와 제목 줄만 */
+.sheet-d.collapsed { overflow: hidden; }
+.sheet-d.collapsed > :nth-child(n+3) { display: none !important; }
+.sheet-d.collapsed .handle::before { opacity: 0.8; }
 .sheet-d .head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .sheet-d .head h2 { font-size: 20px; }
 .sheet-d .head .sub { font-weight: 600; white-space: nowrap; }
