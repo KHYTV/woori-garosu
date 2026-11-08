@@ -16,6 +16,7 @@ import { renderProfileScreen } from "./profile.js";
 import { initFriends, attachFriendsMap, syncFriends, focusFriend } from "./friends.js";
 import * as reg from "./register.js";
 import { photoField } from "./camera.js";
+import { isMemo, syncable, treePhotos, isProof, cutText, infoButton, openMemo, deleteMemo, explainOnce } from "./records.js";
 
 const $ = sel => document.querySelector(sel);
 const nf = (v, d = 0) => Number(v).toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -106,7 +107,7 @@ async function pushPending() {
   for (const t of state.my) await cloud.api.follow({ id: t.id, name: t.name, species: t.species, dong: t.dong, since: t.since });
   // 어느 서버에 보냈는지 기억해 두어, 서버가 바뀌면 다시 보낸다
   for (const p of state.posts) {
-    if (p.syncedTo === cloud.baseUrl()) continue;
+    if (p.syncedTo === cloud.baseUrl() || !syncable(p)) continue; // 메모는 기기에만
     const t = myTree(p.treeId);
     if (!t) continue;
     await cloud.api.addActivity({ treeId: p.treeId, activity: p.activity, clientId: String(p.pid), dong: t.dong, t: p.t });
@@ -731,7 +732,8 @@ function befriend(r) {
       const p = proactive(ctx);
       if (p) await db.addMessage({ treeId: r.id, t: new Date(Date.now() + 1000).toISOString(), from: "tree", text: p.text, activity: p.activity });
       toast(`${josa(name, "과", "와")} 친구가 되었어요`);
-      go(`#tree/${encodeURIComponent(r.id)}`);
+      // 나무 화면(#tree/<id>)에서 맺으면 주소가 같아 hashchange가 없으므로 직접 다시 그린다
+      if (location.hash === `#tree/${encodeURIComponent(r.id)}`) route(); else go(`#tree/${encodeURIComponent(r.id)}`);
     },
   });
   setTimeout(() => input.select(), 50);
@@ -771,27 +773,53 @@ async function renderSNS() {
     el("div", { class: "kpis tight" },
       kpi("함께한 뒤 나무가 흡수", ...mass(totals.year), "친구 맺은 날부터(추정)"),
       kpi("돌보는 동안 흡수", ...mass(totals.protected), `돌봄 뒤 ${ACT.protection.care_effect_days}일 기준`),
-      kpi("내 생활 실천 감축", ...mass(totals.practice), "실천 기록 환산(추정)"),
+      kpi("내 생활 실천 감축(추정)", ...mass(totals.practice), "실천 기록을 평균 계수로 환산"),
       kpi("기여 점수", nf(totals.points), "점", lv.next ? `${lv.name} · 다음까지 ${lv.next}점` : lv.name)),
+    el("div", { class: "row end" }, infoButton(recordHelpers(), "감축량·흡수량은 추정이에요")),
     el("a", { class: "card link-card", href: "#profile" }, el("span", {}, el("b", {}, "생활 실천 · 동네 순위"), el("span", { class: "sub" }, " 내 프로필에서 기록하고 확인해요")), el("span", { class: "chev", "aria-hidden": "true" }, "›")),
     el("h2", {}, "기록"), feed));
 }
 // ---------- 내 프로필 (docs/js/profile.js) ----------
 async function renderProfile() {
   await refreshMine();
-  await renderProfileScreen($("#s-profile"), { state, ACT, el, nf, mass, massText, kpi, levelOf, postCard, onlineCard, loadRankings, dialog, toast, avatar, saveActivity, cloudOn, rerender: renderProfile });
+  await renderProfileScreen($("#s-profile"), { state, ACT, el, nf, mass, massText, kpi, levelOf, postCard, onlineCard, loadRankings, dialog, toast, avatar, saveActivity, cloudOn, rerender: renderProfile, records: recordHelpers() });
+}
+// 메모·감축 도움말(records.js)에 넘기는 화면 도우미
+const recordHelpers = () => ({ el, dialog, toast, ACT, massText });
+// 메모를 고치거나 지운 뒤 지금 화면을 같은 자리에서 다시 그린다
+async function rerenderHere() {
+  const y = window.scrollY;
+  const [name, arg] = (location.hash.slice(1).split("?")[0] || "intro").split("/");
+  if (name === "tree" && arg) await renderTree(decodeURIComponent(arg));
+  else if (name === "sns") await renderSNS();
+  else if (name === "profile") await renderProfile();
+  else await refreshMine();
+  window.scrollTo(0, y);
 }
 function postCard(p) {
   const t = myTree(p.treeId);
   if (!t) return null;
+  if (isMemo(p)) return memoCard(p, t);
   const card = el("article", { class: "post" },
     el("header", {}, avatar(t, { size: 36 }), el("div", {}, el("a", { href: `#tree/${encodeURIComponent(t.id)}` }, el("b", {}, t.name)), el("span", { class: "sub" }, ` · ${t.species} · ${timeAgo(p.t)}`))),
     p.photo ? el("img", { class: "post-photo", src: URL.createObjectURL(p.photo), alt: p.label || "사진" }) : null,
     el("p", {}, el("span", { class: "act-icon" }, p.icon || ""), " ", el("b", {}, p.label), p.circ ? ` · 둘레 ${nf(p.circ)}cm` : "", p.text ? ` — ${p.text}` : ""),
     el("div", { class: "badges" }, p.points ? el("span", { class: "badge" }, `+${p.points}점`) : null,
       p.kg ? el("span", { class: "badge green" }, `−${massText(p.kg)} CO₂ (추정)`) : null,
-      p.kind === "care" ? el("span", { class: "badge soft" }, "돌봄") : p.kind === "practice" ? el("span", { class: "badge soft" }, "생활 실천") : null));
+      p.kind === "care" ? el("span", { class: "badge soft" }, "돌봄") : p.kind === "practice" ? el("span", { class: "badge soft" }, "생활 실천") : null,
+      isProof(p) ? el("span", { class: "badge proof" }, "📷 인증") : null));
   return card;
+}
+// 메모(관찰 일기): 점수·감축 없이 글과 사진만, 고치기·지우기
+function memoCard(p, t) {
+  return el("article", { class: "post memo", "data-pid": p.pid },
+    el("header", {}, avatar(t, { size: 36 }), el("div", {}, el("a", { href: `#tree/${encodeURIComponent(t.id)}` }, el("b", {}, t.name)), el("span", { class: "sub" }, ` · ${timeAgo(p.t)}${p.edited ? " · 고침" : ""}`))),
+    p.photo ? el("img", { class: "post-photo", src: URL.createObjectURL(p.photo), alt: "메모 사진" }) : null,
+    p.text ? el("p", { class: "memo-text" }, p.text) : null,
+    el("div", { class: "badges" }, el("span", { class: "badge memo" }, "📝 메모"), el("span", { class: "badge soft" }, "기기에만 저장"),
+      el("span", { class: "memo-tools" },
+        el("button", { type: "button", class: "btn ghost small", onclick: () => openMemo(recordHelpers(), t, p, rerenderHere) }, "고치기"),
+        el("button", { type: "button", class: "btn ghost small danger", onclick: () => deleteMemo(recordHelpers(), p, rerenderHere) }, "지우기"))));
 }
 
 // ---------- 나무 프로필 ----------
@@ -808,6 +836,9 @@ async function renderTree(id) {
     return;
   }
   const posts = postsOf(id);
+  if (lastFeedTree !== id) treeFeedFilter = "all";
+  lastFeedTree = id;
+  const shown = treeFeedFilter === "memo" ? posts.filter(isMemo) : posts;
   const today = new Date();
   const todayKg = dailyUptake(t.annualKg, today, P), yearKg = uptakeBetween(t.annualKg, new Date(t.since), today, P);
   const prot = protectedKg(t, posts), prac = practiceKg(posts);
@@ -832,6 +863,7 @@ async function renderTree(id) {
       el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care") }, "🌳 돌봄 기록"),
       el("a", { class: "btn ghost", href: `#profile?tree=${encodeURIComponent(id)}` }, "🌱 생활 실천"),
       el("button", { type: "button", class: "btn ghost", onclick: () => openActivity(t, "care", "observe") }, "📷 사진 올리기"),
+      el("button", { type: "button", class: "btn ghost", onclick: () => openMemo(recordHelpers(), t, null, () => { treeFeedFilter = "memo"; return rerenderHere(); }) }, "📝 메모"),
       el("a", { class: "btn ghost", href: `#photo/${encodeURIComponent(id)}` }, "🖼️ 사진·캐릭터·AR"),
       t.dbh ? view3dButton(t) : null),
     el("section", { class: "card where" }, el("div", { class: "k" }, "이 나무가 서 있는 곳"),
@@ -844,7 +876,8 @@ async function renderTree(id) {
       kpi("오늘 흡수", ...uptake(todayKg), "이 나무, 오늘 하루(추정)"),
       kpi("함께한 뒤 흡수", ...uptake(yearKg), `${new Date(t.since).toLocaleDateString("ko-KR")}부터`),
       kpi("돌보는 동안 흡수", ...uptake(prot), `돌봄 뒤 ${ACT.protection.care_effect_days}일 기준`),
-      kpi("내 실천 감축", ...mass(prac), "이 나무와 함께 기록한 실천")),
+      kpi("내 실천 감축(추정)", ...mass(prac), "이 나무와 함께 기록한 실천")),
+    el("div", { class: "row end" }, infoButton(recordHelpers(), "흡수량·감축량은 추정이에요")),
     sug.length ? el("section", { class: "card suggest" }, el("div", { class: "k" }, `${t.name}의 오늘 부탁`),
       ...sug.map(s => el("div", { class: "sug" }, el("p", {}, s.text, el("span", { class: "why" }, ` (${s.why})`)),
         el("button", { type: "button", class: "btn small", onclick: () => openActivity(t, "care", s.activity) }, "지금 기록")))) : null,
@@ -852,7 +885,8 @@ async function renderTree(id) {
       el("div", { class: "big num" }, t.seq[1] !== null ? `${kg(t.seq[0])}~${kg(t.seq[2])}` : t.dbh || t.user ? "-" : "흉고 미상", el("small", {}, t.seq[1] !== null || t.dbh || t.user ? "kg/년" : "")),
       el("p", { class: "limit" }, `${t.user && !t.dbh ? "둘레를 재서 기록하면(돌봄 기록 → 둘레 재기) 흡수량을 계산할 수 있어요. " : ""}도시 생육 보정은 해외 기준을 썼고 국내 도시수목 상대생장식이 없어 대리식을 적용했습니다.${t.block ? " 이 구간의 흉고는 대표값으로 보여 범위를 넓게 잡았습니다." : ""}${measured ? ` 내가 잰 둘레 ${nf(measured.circ)}cm(흉고 ${nf(circumferenceToDbh(measured.circ), 1)}cm)가 기록되어 있어요.` : ""}`)),
     el("h2", {}, `${t.name}의 기록 ${posts.length}건`),
-    el("div", { class: "feed" }, ...(posts.length ? posts.map(postCard) : [el("p", { class: "empty" }, "첫 기록을 남겨 보세요.")])),
+    feedFilter(t, posts),
+    el("div", { class: "feed" }, ...(shown.length ? shown.map(postCard) : [el("p", { class: "empty" }, treeFeedFilter === "memo" ? "아직 메모가 없어요. '📝 메모'로 오늘 본 모습을 적어 보세요." : "첫 기록을 남겨 보세요.")])),
     el("div", { class: "row end" }, el("button", { type: "button", class: "btn ghost small danger", onclick: () => unfriend(t) }, "친구 끊기"))));
   const mapBox = $("#treeMap");
   createMiniMap(mapBox, { center: [t.lon, t.lat], zoom: 18, token }).then(mm => {
@@ -860,6 +894,13 @@ async function renderTree(id) {
     mm.setTrees([{ i: t.i, lon: t.lon, lat: t.lat, label: t.name }]);
     mm.setSelected({ lon: t.lon, lat: t.lat });
   }).catch(err => { mapBox.replaceChildren(el("p", { class: "empty" }, `지도를 불러오지 못했어요 (${err.message})`)); });
+}
+// 나무 기록 거르기: 전체 / 메모만(관찰 일기 모아 보기)
+let treeFeedFilter = "all", lastFeedTree = null;
+function feedFilter(t, posts) {
+  const memos = posts.filter(isMemo).length;
+  const chip = (key, label) => el("button", { type: "button", class: "chip btn-chip", "aria-pressed": String(treeFeedFilter === key), onclick: () => { treeFeedFilter = key; rerenderHere(); } }, label);
+  return el("div", { class: "feed-filter", role: "group", "aria-label": "기록 거르기" }, chip("all", `전체 ${posts.length}`), chip("memo", `📝 메모 ${memos}`));
 }
 function renameTree(t) {
   const input = el("input", { type: "text", name: "name", maxlength: "12", required: true, value: t.name, "aria-label": "나무 이름" });
@@ -873,7 +914,7 @@ function renameTree(t) {
   setTimeout(() => input.select(), 50);
 }
 function unfriend(t) {
-  dialog("친구를 끊을까요?", el("p", { class: "dialog-body" }, `${josa(t.name, "과", "와")}의 기록(사진·대화 포함)이 이 기기에서 지워져요.`), { confirm: "끊기", onConfirm: async () => {
+  dialog("친구를 끊을까요?", el("p", { class: "dialog-body" }, `${josa(t.name, "과", "와")}의 기록(사진·메모·대화 포함)이 이 기기에서 지워져요.`), { confirm: "끊기", onConfirm: async () => {
     await db.deleteTree(t.id);
     await refreshMine();
     if (cloudOn()) cloud.api.unfollow(t.id).catch(err => console.warn("서버 친구 끊기 실패", err));
@@ -887,7 +928,7 @@ function openActivity(t, kind, presetId = null) {
   const items = kind === "care" ? ACT.care : ACT.practice;
   let picked = presetId ? items.find(a => a.id === presetId) : null;
   const list = el("div", { class: "act-list" }, ...items.map(a => el("button", { type: "button", class: "act", "aria-pressed": String(picked?.id === a.id), onclick: () => { picked = a; for (const b of list.children) b.setAttribute("aria-pressed", String(b === btn)); renderForm(); }, "data-id": a.id },
-    el("span", { class: "act-icon" }, a.icon), el("span", { class: "act-label" }, a.label), el("span", { class: "act-sub" }, `+${a.points}점${a.kg ? ` · −${massText(a.kg)}/${a.per}` : a.kg === null ? " · 점수만" : ""}`))));
+    el("span", { class: "act-icon" }, a.icon), el("span", { class: "act-label" }, a.label), el("span", { class: "act-sub" }, `+${a.points}점${a.kg ? ` · −${massText(a.kg)}/${a.per} (추정)` : a.kg === null ? " · 점수만" : ""}`))));
   const btn = null;
   const formBox = el("div", { class: "act-form" });
   // 사진: 앱 안 카메라로 바로 찍거나 앨범에서 고른다(활동을 바꿔도 고른 사진은 남는다)
@@ -909,7 +950,7 @@ function openActivity(t, kind, presetId = null) {
     const circ = form.circ ? Number(form.circ.value) || null : null;
     const post = await saveActivity(t, kind, picked, { photo: photo.blob, circ, text: (form.text.value || "").trim() });
     if (!post) return false;
-    toast(`기록했어요 · +${picked.points}점${picked.kg ? ` · −${massText(picked.kg)}` : ""}`);
+    toast(`기록했어요 · +${picked.points}점${picked.kg ? ` · ${cutText(massText, picked.kg)}` : ""}`);
     // 사진을 올리면 실제 나무와 캐릭터를 나란히 보여 준다
     if (photo.blob) go(`#photo/${encodeURIComponent(t.id)}`);
     else if (location.hash.startsWith("#chat/")) renderChat(t.id);
@@ -939,7 +980,7 @@ function stopCamera() {
   for (const tr of arStream.getTracks()) tr.stop();
   arStream = null;
 }
-const photosOf = id => postsOf(id).filter(p => p.photo);
+const photosOf = id => treePhotos(postsOf(id)); // 실천 인증·메모 사진은 섞지 않는다
 
 // 실제 나무 사진과 캐릭터를 나란히
 async function renderPhoto(id) {
@@ -1099,7 +1140,7 @@ async function renderGroup(id) {
     const d = m.t.slice(0, 10);
     if (d !== lastDay) { list.append(el("div", { class: "day" }, new Date(m.t).toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" }))); lastDay = d; }
     if (m.kind === "activity") {
-      list.append(el("div", { class: "event" }, `${m.nickname}님이 ${m.label} 기록 · +${m.points}점${m.kg ? ` · −${massText(Number(m.kg))}` : ""}`));
+      list.append(el("div", { class: "event" }, `${m.nickname}님이 ${m.label} 기록 · +${m.points}점${m.kg ? ` · ${cutText(massText, Number(m.kg))}` : ""}`));
       return;
     }
     const mine = m.guardian_id === myId;

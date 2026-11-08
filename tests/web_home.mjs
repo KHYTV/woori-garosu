@@ -9,6 +9,8 @@ import { careSuggestions } from "../docs/js/weather.js";
 import { treesInBounds, friendPoints, friendRows, distText } from "../docs/js/friends.js";
 import { findArea, areaTrees, speciesCounts, centerOf, pointInArea, openArea } from "../docs/js/area.js";
 import { newUserTreeId, isUserTreeId, insidePolygon, guessDong, userRecord } from "../docs/js/usertrees.js";
+import { newMemo, isMemo, syncable, treePhotos, isProof, proofCount, cutText } from "../docs/js/records.js";
+import { reaction, reply } from "../docs/js/talk.js";
 
 const root = new URL("../", import.meta.url);
 const S = JSON.parse(readFileSync(new URL("docs/data/summary.json", root), "utf8"));
@@ -194,6 +196,28 @@ const jeonju = Object.keys(S.species_info).filter(sp => sp !== "기타");
 check(LEAF.classes.length === jeonju.length && jeonju.every(sp => LEAF.classes.some(c => c.species === sp)) && unit,
   `leafid.json: 전주 수종 ${LEAF.classes.length}종 × ${dim}차원, 단위 벡터 (${LEAF.model}, ${LEAF.dtype})`);
 check(Math.abs(LEAF.classes.reduce((a, c) => a + c.prior, 0) - 1) < 1e-3, "수종 사전확률 합 = 1");
+
+// 기록(records.js): 메모는 기기에만·점수 없음, 실천 사진 인증, 나무 사진 모음 구분, 감축량 '추정' 표시
+const memo = newMemo("83428", { text: "  새잎이 났어요  " }, new Date(2026, 10, 8));
+check(isMemo(memo) && memo.points === 0 && memo.kg === 0 && memo.text === "새잎이 났어요" && !("activity" in memo) && memo.photo === null, "메모: kind memo, 점수·감축 0, 활동 종류 없음");
+const fakePhoto = { size: 1 };
+const RP = [memo, { ...memo, photo: fakePhoto },
+  { kind: "care", activity: "observe", photo: fakePhoto }, { kind: "care", activity: "water" },
+  { kind: "practice", activity: "transit", kg: 1.2, photo: fakePhoto }, { kind: "practice", activity: "tumbler", kg: 0.011 }];
+check(RP.filter(syncable).length === 4 && !RP.filter(isMemo).some(syncable), "메모는 서버로 보내지 않는다(syncable)");
+check(treePhotos(RP).length === 1 && treePhotos(RP)[0].activity === "observe", "나무 사진 모음에는 돌봄 사진만(실천 인증·메모 사진 제외)");
+check(proofCount(RP) === 1 && isProof(RP[4]) && !isProof(RP[5]) && !isProof(RP[1]), "실천 사진 인증 건수");
+check(cutText(v => `${v}kg`, 1.2) === "−1.2kg (추정)", "감축량 표시에 '(추정)'");
+const tctx = { tree: { name: "느티", species: "느티나무", road: "명륜1길", annualKg: 20 }, season: "summer", todayKg: 0.1, yearKg: 5, practiceKg: 2.4, protectedKg: 0.3, points: 30, gainedPoints: 8, gainedKg: 1.2 };
+check((reaction({ id: "transit", kind: "practice" }, tctx).match(/추정/g) || []).length >= 2 && /추정.*평균 계수/.test(reply("내 실천 감축은 어때", tctx)), "나무 반응·대답의 감축량에 '추정'");
+// 화면 코드에서 감축량(−값)을 그리는 곳은 모두 '추정'을 붙인다
+for (const f of ["docs/js/home.js", "docs/js/profile.js"]) {
+  const src = readFileSync(new URL(f, root), "utf8").split("\n");
+  const bare = src.filter(l => /−\$\{massText\(/.test(l) && !/추정/.test(l));
+  check(bare.length === 0, `${f}: '추정' 없는 감축량 표시 ${bare.length}곳`);
+}
+const homeSrc = readFileSync(new URL("docs/js/home.js", root), "utf8");
+check(/!syncable\(p\)/.test(homeSrc) && /treePhotos\(postsOf/.test(homeSrc), "home.js: 서버 동기화에서 메모 제외, 사진 모음은 treePhotos");
 
 if (failed) { console.error(`${failed}개 실패`); process.exit(1); }
 console.log("홈 모듈 모두 통과");

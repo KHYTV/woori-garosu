@@ -53,7 +53,7 @@ export function reply(text, ctx) {
     return `오늘은 약 ${kg(todayKg)}, 올해 들어 약 ${kg(yearKg)}의 CO₂를 들이마셨어요. 한 해로 치면 약 ${kg(tree.annualKg)}이에요(추정값이에요).`;
   }
   if (has("점수", "레벨", "포인트")) return `지금까지 ${points}점이에요. 돌봄과 생활 실천을 기록할 때마다 올라가요.`;
-  if (has("실천", "감축", "줄였")) return `보호자님의 생활 실천으로 지금까지 약 ${kg(practiceKg)}을 줄였어요. 저와 함께하는 숫자예요.`;
+  if (has("실천", "감축", "줄였")) return `보호자님의 생활 실천으로 지금까지 약 ${kg(practiceKg)}을 줄인 셈이에요(추정). 실제로 잰 값이 아니라 평균 계수로 환산한 숫자예요.`;
   if (has("물", "목말")) {
     if (weather?.flags?.dry || weather?.flags?.heat) return "네, 사실 요즘 목이 말라요. 한 통만 천천히 부어 주시면 뿌리까지 스며들어요. 물을 주셨으면 '돌봄 기록'에 남겨 주세요.";
     return "요즘은 비가 적당히 와서 괜찮아요. 그래도 주신다면 고맙게 마시죠.";
@@ -88,7 +88,7 @@ export function reaction(activity, ctx) {
   }[activity.id] || "기록해 주셔서 고마워요.";
   const parts = [head];
   if (activity.kind === "practice") {
-    if (gainedKg > 0) parts.push(`이번 실천으로 약 ${kg(gainedKg)}(추정)을 줄였어요. 보호자님의 실천 감축은 모두 ${kg(practiceKg)}이에요.`);
+    if (gainedKg > 0) parts.push(`이번 실천으로 약 ${kg(gainedKg)}을 줄인 셈이에요(추정). 보호자님의 실천 감축은 모두 약 ${kg(practiceKg)}(추정)이에요.`);
     else parts.push("이 실천은 감축량을 숫자로 매기지 않지만 점수는 드려요.");
   } else {
     parts.push(`오늘 저는 약 ${kg(todayKg)}의 CO₂를 들이마셨고, 보호자님이 돌봐 주시는 동안 들이마신 양은 ${kg(protectedKg)}이 됐어요.`);
